@@ -8,8 +8,11 @@ const DEAD_COLOR = "#FFFFFF";
 const ALIVE_COLOR = "#000000";
 
 const universe = Universe.new();
+universe.set_width(64);
+universe.set_height(64);
 const width = universe.width();
 const height = universe.height();
+universe.reset();
 
 const canvas = document.getElementById("game-of-life-canvas");
 canvas.width = (CELL_SIZE + 1) * width + 1;
@@ -95,6 +98,14 @@ const getIndex = (row, column) => {
     return row * width + column;
 }
 
+const wrapRow = row => {
+    return (row + (universe.height())) % (universe.height());
+}
+
+const wrapCol = col => {
+    return (col + (universe.width())) % (universe.width());
+}
+
 const drawCells = () => {
     const cellsPtr = universe.cells();
     const cells = new Uint8Array(memory.buffer, cellsPtr, width * height);
@@ -138,21 +149,99 @@ const drawCells = () => {
 }
 
 canvas.addEventListener("click", event => {
-  const boundingRect = canvas.getBoundingClientRect();
+    const boundingRect = canvas.getBoundingClientRect();
+    
+    const scaleX = canvas.width / boundingRect.width;
+    const scaleY = canvas.height / boundingRect.height;
 
-  const scaleX = canvas.width / boundingRect.width;
-  const scaleY = canvas.height / boundingRect.height;
+    const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
+    const canvasTop = (event.clientY - boundingRect.top) * scaleY;
 
-  const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
-  const canvasTop = (event.clientY - boundingRect.top) * scaleY;
+    const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
+    const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
 
-  const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
-  const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
+    const insert = document.getElementById("insert");
+    if (insert.value === "cell") {
+	universe.toggle_cell(row, col);
+    } else if (insert.value === "glider") {
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col + 1));
+	universe.toggle_cell(wrapRow(row), wrapCol(col + 1));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col + 1));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col));
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col - 1));			
+    } else if (insert.value === "pulsar") {
+	// line 1 of pulsar
+	universe.toggle_cell(wrapRow(row - 6), wrapCol(col - 4));
+	universe.toggle_cell(wrapRow(row - 6), wrapCol(col - 3));
+	universe.toggle_cell(wrapRow(row - 6), wrapCol(col - 2));
+	universe.toggle_cell(wrapRow(row - 6), wrapCol(col + 4));
+	universe.toggle_cell(wrapRow(row - 6), wrapCol(col + 3));
+	universe.toggle_cell(wrapRow(row - 6), wrapCol(col + 2));	
 
-  universe.toggle_cell(row, col);
+	// line 3 of pulsar
+	universe.toggle_cell(wrapRow(row - 4), wrapCol(col - 6));
+	universe.toggle_cell(wrapRow(row - 4), wrapCol(col - 1));			
+	universe.toggle_cell(wrapRow(row - 4), wrapCol(col + 6));
+	universe.toggle_cell(wrapRow(row - 4), wrapCol(col + 1));
 
-  drawGrid();
-  drawCells();
+	// line 4
+	universe.toggle_cell(wrapRow(row - 3), wrapCol(col - 6));
+	universe.toggle_cell(wrapRow(row - 3), wrapCol(col - 1));			
+	universe.toggle_cell(wrapRow(row - 3), wrapCol(col + 6));
+	universe.toggle_cell(wrapRow(row - 3), wrapCol(col + 1));			
+
+	// line 5
+	universe.toggle_cell(wrapRow(row - 2), wrapCol(col - 6));
+	universe.toggle_cell(wrapRow(row - 2), wrapCol(col - 1));			
+	universe.toggle_cell(wrapRow(row - 2), wrapCol(col + 6));
+	universe.toggle_cell(wrapRow(row - 2), wrapCol(col + 1));			
+
+	// line 6
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col - 4));
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col - 3));
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col - 2));
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col + 4));
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col + 3));
+	universe.toggle_cell(wrapRow(row - 1), wrapCol(col + 2));	
+
+	// line 8
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col - 4));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col - 3));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col - 2));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col + 4));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col + 3));
+	universe.toggle_cell(wrapRow(row + 1), wrapCol(col + 2));	
+
+	// line 9
+	universe.toggle_cell(wrapRow(row + 2), wrapCol(col - 6));
+	universe.toggle_cell(wrapRow(row + 2), wrapCol(col - 1));			
+	universe.toggle_cell(wrapRow(row + 2), wrapCol(col + 6));
+	universe.toggle_cell(wrapRow(row + 2), wrapCol(col + 1));			
+
+	// line 10
+	universe.toggle_cell(wrapRow(row + 3), wrapCol(col - 6));
+	universe.toggle_cell(wrapRow(row + 3), wrapCol(col - 1));			
+	universe.toggle_cell(wrapRow(row + 3), wrapCol(col + 6));
+	universe.toggle_cell(wrapRow(row + 3), wrapCol(col + 1));			
+
+	// line 11
+	universe.toggle_cell(wrapRow(row + 4), wrapCol(col - 6));
+	universe.toggle_cell(wrapRow(row + 4), wrapCol(col - 1));			
+	universe.toggle_cell(wrapRow(row + 4), wrapCol(col + 6));
+	universe.toggle_cell(wrapRow(row + 4), wrapCol(col + 1));			
+
+	// line 13
+	universe.toggle_cell(wrapRow(row + 6), wrapCol(col - 4));
+	universe.toggle_cell(wrapRow(row + 6), wrapCol(col - 3));
+	universe.toggle_cell(wrapRow(row + 6), wrapCol(col - 2));
+	universe.toggle_cell(wrapRow(row + 6), wrapCol(col + 4));
+	universe.toggle_cell(wrapRow(row + 6), wrapCol(col + 3));
+	universe.toggle_cell(wrapRow(row + 6), wrapCol(col + 2));	
+	
+    }
+
+    drawGrid();
+    drawCells();
 });
 
 const isPaused = () => {

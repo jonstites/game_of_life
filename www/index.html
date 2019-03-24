@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Hello wasm-pack!</title>
+    <title>Conway's Game of Life!</title>
     <style>
   body {
     position: absolute;
@@ -27,7 +27,12 @@
   <body>
     <button id="play-pause"></button>
     <button id="randomize"></button>
-    <button id="reset"></button>    
+    <button id="reset"></button>
+    <select id="insert">
+      <option value = "cell">cell</option>
+      <option value = "glider">glider</option>
+      <option value = "pulsar">pulsar</option>      
+    </select>
     <div id="fps"></div>
     <canvas id="game-of-life-canvas"></pre>
     <script src="./bootstrap.js"></script>
