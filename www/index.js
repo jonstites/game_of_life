@@ -173,6 +173,17 @@ randomizeButton.addEventListener("click", event => {
     drawCells();
 });
 
+const resetButton = document.getElementById("reset");
+resetButton.textContent = "reset";
+
+resetButton.addEventListener("click", event => {
+    universe.reset();
+    drawGrid();
+    drawCells();
+});
+
+
+
 
 drawGrid();
 drawCells();

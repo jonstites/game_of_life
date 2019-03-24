@@ -86,14 +86,18 @@ impl Universe {
             }).collect();
     }
 
+    pub fn reset(&mut self) {
+        self.cells = (0..self.width * self.height).map(|_i| Cell::Dead).collect();
+    }
+
     pub fn set_width(&mut self, width: u32) {
         self.width = width;
-        self.cells = (0..self.width * self.height).map(|_i| Cell::Dead).collect();
+        self.reset();
     }
 
     pub fn set_height(&mut self, height: u32) {
         self.height = height;
-        self.cells = (0..self.width * self.height).map(|_i| Cell::Dead).collect();        
+        self.reset();
     }
 
     pub fn width(&self) -> u32 {
