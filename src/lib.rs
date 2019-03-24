@@ -1,4 +1,5 @@
 extern crate cfg_if;
+extern crate js_sys;
 extern crate wasm_bindgen;
 
 mod utils;
@@ -55,8 +56,8 @@ pub struct Universe {
 impl Universe {
 
     pub fn new() -> Universe {
-        let width = 64;
-        let height = 64;
+        let width = 164;
+        let height = 164;
 
         let cells = (0..width * height)
             .map(|i| {
@@ -72,6 +73,17 @@ impl Universe {
             height,
             cells,
         }
+    }
+
+    pub fn randomize(&mut self) {
+        self.cells = (0..self.width * self.height)
+            .map(|_i| {
+                if js_sys::Math::random() > 0.5 {
+                    Cell::Alive
+                } else {
+                    Cell::Dead
+                }
+            }).collect();
     }
 
     pub fn set_width(&mut self, width: u32) {

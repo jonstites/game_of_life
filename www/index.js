@@ -164,6 +164,15 @@ playPauseButton.addEventListener("click", event => {
   }
 });
 
+const randomizeButton = document.getElementById("randomize");
+randomizeButton.textContent = "randomize";
+
+randomizeButton.addEventListener("click", event => {
+    universe.randomize();
+    drawGrid();
+    drawCells();
+});
+
 
 drawGrid();
 drawCells();
