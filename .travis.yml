@@ -1,4 +1,7 @@
-language: rust
+language:
+  - rust
+  - node_js
+
 sudo: false
 
 cache: cargo
@@ -67,3 +70,28 @@ matrix:
       - cargo check --target wasm32-unknown-unknown --no-default-features --features console_error_panic_hook
       # Note: no enabling the `wee_alloc` feature here because it requires
       # nightly for now.
+
+
+script:
+  - ls -l
+  - wasm-pack build
+  - wasm-pack test --chrome --firefox --headless
+  - cd www
+  - npm link game-of-life
+  - npm run build
+  
+deploy:
+  provider: s3
+  bucket: life.jonstites.com  
+  skip_cleanup: true
+  local_dir: www/dist
+  access_key_id: $AWS_ACCESS_KEY 
+  secret_access_key: $AWS_SECRET_KEY
+  region: $AWS_DEFAULT_REGION
+  cache_control: "max-age=31536000"
+  on:
+    branch:
+      - master
+      - deploy-test
+
+    
