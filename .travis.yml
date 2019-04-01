@@ -72,7 +72,7 @@ matrix:
       # nightly for now.
 
 
-script:
+before_deploy:
   - ls -l
   - wasm-pack build
   - wasm-pack test --chrome --firefox --headless
