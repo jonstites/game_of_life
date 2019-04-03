@@ -55,6 +55,7 @@ deploy:
   on:
     branch:
       - master
-      - deploy-test
-
     
+notifications:
+  email:
+    on_success: never
