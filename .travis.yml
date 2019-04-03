@@ -6,6 +6,9 @@ sudo: false
 
 cache: cargo
 
+before_install:
+  - npm install -g npm@latest
+  
 matrix:
   include:
 
