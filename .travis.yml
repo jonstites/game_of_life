@@ -79,7 +79,10 @@ before_deploy:
   - ls -l
   - wasm-pack build
   - wasm-pack test --chrome --firefox --headless
-  - cd www
+  - cd pkg
+  - npm link
+  - cd ../www
+  - npm install
   - npm link game-of-life
   - npm run build
   
