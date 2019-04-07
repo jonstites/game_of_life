@@ -52,6 +52,7 @@ deploy:
   secret_access_key: $AWS_SECRET_KEY
   region: $AWS_DEFAULT_REGION
   cache_control: "max-age=31536000"
+  detect_encoding: true
   on:
     branch:
       - master
