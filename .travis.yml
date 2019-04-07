@@ -45,6 +45,9 @@ before_deploy:
   
 deploy:
   provider: s3
+  edge:
+    source: jonstites/dpl
+    branch: feature/mime-types-3
   bucket: life.jonstites.com  
   skip_cleanup: true
   local_dir: www/dist
