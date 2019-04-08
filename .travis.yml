@@ -45,6 +45,9 @@ before_deploy:
   
 deploy:
   provider: s3
+  edge:
+    source: jonstites/dpl
+    branch: feature/upgrade-mime-types-gem
   bucket: life.jonstites.com  
   skip_cleanup: true
   local_dir: www/dist
@@ -52,6 +55,7 @@ deploy:
   secret_access_key: $AWS_SECRET_KEY
   region: $AWS_DEFAULT_REGION
   cache_control: "max-age=31536000"
+  detect_encoding: true
   on:
     branch:
       - master
