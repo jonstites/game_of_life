@@ -47,7 +47,7 @@ deploy:
   provider: s3
   edge:
     source: jonstites/dpl
-    branch: feature/mime-types-3
+    branch: feature/upgrade-mime-types-gem
   bucket: life.jonstites.com  
   skip_cleanup: true
   local_dir: www/dist
@@ -59,7 +59,6 @@ deploy:
   on:
     branch:
       - master
-      - deploy-test3
     
 notifications:
   email:
