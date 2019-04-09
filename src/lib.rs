@@ -4,29 +4,7 @@ extern crate wasm_bindgen;
 
 mod utils;
 
-use std::fmt;
-use cfg_if::cfg_if;
 use wasm_bindgen::prelude::*;
-
-cfg_if! {
-    // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
-    // allocator.
-    if #[cfg(feature = "wee_alloc")] {
-        extern crate wee_alloc;
-        #[global_allocator]
-        static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-    }
-}
-
-#[wasm_bindgen]
-extern {
-    fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-pub fn greet(name: &str) {
-    alert(&format!("Hello, {:?}!", name));
-}
 
 #[wasm_bindgen]
 #[repr(u8)]
@@ -46,6 +24,7 @@ impl Cell {
 }
 
 #[wasm_bindgen]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Universe {
     width: u32,
     height: u32,
@@ -55,18 +34,11 @@ pub struct Universe {
 #[wasm_bindgen]
 impl Universe {
 
-    pub fn new() -> Universe {
-        let width = 164;
-        let height = 164;
+    pub fn new(width: u32, height: u32) -> Universe {
 
         let cells = (0..width * height)
-            .map(|i| {
-                if i % 2 == 0 || i % 7 == 0 {
-                    Cell::Alive
-                } else {
-                    Cell::Dead
-                }
-            }).collect();
+            .map(|_i| Cell::Dead)
+            .collect();
 
         Universe {
             width,
@@ -112,12 +84,11 @@ impl Universe {
         self.cells.as_ptr()
     }
 
-    pub fn render(&self) -> String {
-        self.to_string()
-    }
-
+    // Decided to make the wrapping happen in here
     fn get_index(&self, row: u32, column: u32) -> usize {
-        (row * self.width + column) as usize
+        let wrapped_row = row % self.height;
+        let wrapped_column = column % self.width;
+        (wrapped_row * self.width + wrapped_column) as usize
     }
 
     // Implemented as a wrapping universe around the edges
@@ -129,8 +100,8 @@ impl Universe {
                     continue;
                 }
 
-                let neighbor_row = (row + delta_row) % self.height;
-                let neighbor_col = (column + delta_col) % self.width;
+                let neighbor_row = row + delta_row;
+                let neighbor_col = column + delta_col;
                 let index = self.get_index(neighbor_row, neighbor_col);
                 count += self.cells[index] as u8;
             }
@@ -183,21 +154,33 @@ impl Universe {
     }
 }
 
-impl fmt::Display for Universe {
+#[cfg(test)]
+mod tests {
 
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for line in self.cells.as_slice().chunks(self.width as usize) {
-            for &cell in line {
-                let symbol = match cell {
-                    Cell::Dead => '◻',
-                    Cell::Alive => '◼',
-                };
+    use super::*;
 
-                write!(f, "{}", symbol)?;
-            }
-            write!(f, "\n")?;
-        }
-        Ok(())
+    #[test]
+    fn test_cell_toggle() {
+        let mut cell = Cell::Dead;
+        cell.toggle();
+        assert_eq!(cell, Cell::Alive);
+        cell.toggle();        
+        assert_eq!(cell, Cell::Dead);        
     }
-    
+
+    #[test]
+    fn test_universe_size() {
+        let universe = Universe::new(2, 10);
+        assert_eq!(universe.cells.len(), 20);
+    }
+
+    #[test]
+    fn test_wrapping_index() {
+        let mut universe = Universe::new(2, 3);
+        universe.toggle_cell(3, 0);
+
+        let mut expected = Universe::new(2, 3);
+        expected.toggle_cell(0, 0);
+        assert_eq!(universe, expected);
+    }
 }
