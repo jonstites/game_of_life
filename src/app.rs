@@ -11,10 +11,10 @@ extern crate js_sys;
 const CELL_SIZE: u32 = 5; // px
 const GRID_COLOR: &str = "#CCCCCC";
 const DEAD_COLOR: &str = "#FFFFFF";
-const ALIVE_COLOR: &str = "#000000";
-const HEIGHT: u32 = 100;
-const WIDTH: u32 = 100;
-const MILLIS_PER_TICK: u64 = 200;
+const ALIVE_COLOR: &str = "#FF0000";
+const HEIGHT: u32 = 640;
+const WIDTH: u32 = 640;
+const MILLIS_PER_TICK: u64 = 50;
 const RANDOM_ALIVE: f64 = 0.2_f64;
 
 
@@ -28,6 +28,7 @@ pub struct Grid {
     width: u32,
     height: u32,
     cells: Vec<Cell>,
+    previous_cells: Vec<Cell>,
 }
 
 impl Grid {
@@ -35,11 +36,13 @@ impl Grid {
     pub fn new(width: u32, height: u32) -> Grid {
         let num_cells = (width * height) as usize;
         let cells = vec![Cell::Dead; num_cells];
+        let previous_cells = vec![Cell::Dead; num_cells];
 
         Grid {
             width,
             height,
-            cells
+            cells,
+            previous_cells
         }
     }
 
@@ -60,6 +63,11 @@ impl Grid {
     pub fn get_cell(&self, height: u32, width: u32) -> Cell {
         let idx = self.get_idx(height, width);
         self.cells[idx]
+    }
+
+    pub fn get_previous_cell(&self, height: u32, width: u32) -> Cell {
+        let idx = self.get_idx(height, width);
+        self.previous_cells[idx]
     }
 
     pub fn set_cell(&mut self, height: u32, width: u32, cell: Cell) {
@@ -86,23 +94,20 @@ impl Grid {
 
     pub fn step(&mut self) {
 
-        // or double buffer ?
-        let mut next_cells = self.cells.clone();
-
         for i in 0..self.height {
             for j in 0..self.width {
-                let num_neighbors = self.num_neighbors(i, j);
-                if num_neighbors < 2 {
-                    next_cells[self.get_idx(i, j)] = Cell::Dead;
-                } else if num_neighbors == 3 {
-                    next_cells[self.get_idx(i, j)] = Cell::Alive;
-                } else if num_neighbors > 3 {
-                    next_cells[self.get_idx(i, j)] = Cell::Dead;
-                }
 
+                let num_neighbors = self.num_neighbors(i, j);
+                let idx = self.get_idx(i, j);
+                match num_neighbors {
+                    x if x < 2 => {self.previous_cells[idx] = Cell::Dead},
+                    2 => {self.previous_cells[idx] = self.cells[idx];},
+                    3 => {self.previous_cells[idx] = Cell::Alive;},
+                    _ => {self.previous_cells[idx] = Cell::Dead;},
+                }
             }
         }
-        self.cells = next_cells;
+        std::mem::swap(&mut self.cells, &mut self.previous_cells);
     }
 
     pub fn num_neighbors(&self, height: u32, width: u32) -> i32 {
@@ -270,11 +275,11 @@ impl App {
         let scale_x = canvas_width as f64 / rect.width();
         let scale_y = canvas_height as f64 / rect.height();
       
-        let canvasLeft = (event.client_x() as f64 - rect.left()) * scale_y;
-        let canvasTop = (event.client_y() as f64 - rect.top()) * scale_y;
+        let canvas_left = (event.client_x() as f64 - rect.left()) * scale_y;
+        let canvas_top = (event.client_y() as f64 - rect.top()) * scale_y;
       
-        let row = ((canvasTop / (CELL_SIZE as f64 + 1_f64)) as u32).min(HEIGHT - 1);
-        let col = ((canvasLeft / (CELL_SIZE as f64 + 1_f64)) as u32).min(WIDTH - 1);
+        let row = ((canvas_top / (CELL_SIZE as f64 + 1_f64)) as u32).min(HEIGHT - 1);
+        let col = ((canvas_left / (CELL_SIZE as f64 + 1_f64)) as u32).min(WIDTH - 1);
 
         self.grid.toggle_cell(row, col);
     }
@@ -325,18 +330,32 @@ impl App {
             .unwrap();
                 
         ctx.begin_path();
-        // here, do the cell alive vs dead thing
+        ctx.set_fill_style(&JsValue::from_str(ALIVE_COLOR));
         for row_idx in 0..HEIGHT {
             for col_idx in 0..WIDTH {
-                if self.grid.get_cell(row_idx, col_idx) == Cell::Alive {
-                    ctx.set_fill_style(&JsValue::from_str("red"));
-                } else {
-                    ctx.set_fill_style(&JsValue::from_str("white"));
+                let current = self.grid.get_cell(row_idx, col_idx);
+                let previous = self.grid.get_previous_cell(row_idx, col_idx);
+
+                if current != previous && current == Cell::Alive {
+                    ctx.fill_rect(col_idx as f64 * (CELL_SIZE as f64 + 1_f64) + 1_f64,
+                    row_idx as f64* (CELL_SIZE as f64 + 1_f64) + 1_f64,
+                    CELL_SIZE as f64,
+                    CELL_SIZE as f64);
+                } 
+            }
+        }        
+        ctx.set_fill_style(&JsValue::from_str(DEAD_COLOR));
+        for row_idx in 0..HEIGHT {
+            for col_idx in 0..WIDTH { 
+                let current = self.grid.get_cell(row_idx, col_idx);
+                let previous = self.grid.get_previous_cell(row_idx, col_idx);
+
+                if current != previous && current == Cell::Dead {
+                    ctx.fill_rect(col_idx as f64 * (CELL_SIZE as f64 + 1_f64) + 1_f64,
+                    row_idx as f64* (CELL_SIZE as f64 + 1_f64) + 1_f64,
+                    CELL_SIZE as f64,
+                    CELL_SIZE as f64);
                 }
-                ctx.fill_rect(col_idx as f64 * (CELL_SIZE as f64 + 1_f64) + 1_f64,
-                row_idx as f64* (CELL_SIZE as f64 + 1_f64) + 1_f64,
-                CELL_SIZE as f64,
-                CELL_SIZE as f64);
             }
         }
 
