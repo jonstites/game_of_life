@@ -1,8 +1,11 @@
-use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement};
+use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement, HtmlElement};
 use yew::{html, Callback, MouseEvent, Component, ComponentLink, Html, ShouldRender, NodeRef};
 use yew::services::{IntervalService, RenderService, Task};
+use yew::services::console::ConsoleService;
+use yew::html::InputData;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::JsCast;
+use yew::components::Select;
 
 use std::time::Duration;
 extern crate js_sys;
@@ -12,8 +15,8 @@ const CELL_SIZE: u32 = 5; // px
 const GRID_COLOR: &str = "#CCCCCC";
 const DEAD_COLOR: &str = "#FFFFFF";
 const ALIVE_COLOR: &str = "#FF0000";
-const HEIGHT: u32 = 640;
-const WIDTH: u32 = 640;
+const DEFAULT_HEIGHT: u32 = 150;
+const DEFAULT_WIDTH: u32 = 150;
 const MILLIS_PER_TICK: u64 = 50;
 const RANDOM_ALIVE: f64 = 0.2_f64;
 
@@ -57,7 +60,7 @@ impl Grid {
     }
 
     pub fn get_idx(&self, height: u32, width: u32) -> usize {
-        ((height * WIDTH) + width) as usize
+        ((height * self.width) + width) as usize
     }
 
     pub fn get_cell(&self, height: u32, width: u32) -> Cell {
@@ -141,6 +144,9 @@ pub struct App {
     timer: Box<dyn Task>,
     active: bool,
     grid: Grid,
+    height: u32,
+    width: u32,
+    console: ConsoleService,
 }
 
 pub enum Msg {
@@ -152,6 +158,8 @@ pub enum Msg {
     Reset,
     Step,
     Toggle(MouseEvent),
+    ResizeWidth(InputData),
+    ResizeHeight(InputData),
 }
 
 impl Component for App {
@@ -162,6 +170,9 @@ impl Component for App {
         let mut interval = IntervalService::new();
         let handle = interval.spawn(Duration::from_millis(MILLIS_PER_TICK), link.callback(|_| Msg::Tick));
 
+        let width = DEFAULT_WIDTH;
+        let height = DEFAULT_HEIGHT;
+
         App {
             canvas: None,
             link: link,
@@ -169,7 +180,10 @@ impl Component for App {
             render_loop: None,
             timer: Box::new(handle),
             active: false,
-            grid: Grid::new(WIDTH, HEIGHT),
+            grid: Grid::new(width, height),
+            height,
+            width,
+            console: ConsoleService::new(),
         }
     }
 
@@ -179,9 +193,9 @@ impl Component for App {
         // for making GL calls.
 
         let canvas: HtmlCanvasElement = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-
-        canvas.set_width(WIDTH * (CELL_SIZE + 1) + 1);
-        canvas.set_height(WIDTH * (CELL_SIZE + 1) + 1);
+        
+        canvas.set_width(self.width * (CELL_SIZE + 1) + 1);
+        canvas.set_height(self.width * (CELL_SIZE + 1) + 1);
 
         self.canvas = Some(canvas);
         let render_frame = self.link.callback(|_| Msg::Draw);
@@ -233,7 +247,27 @@ impl Component for App {
                 self.toggle_cell(event);
                 self.draw_cells();
                 false
-            }
+            },
+            Msg::ResizeWidth(event) => {
+                if let Ok(width) = event.value.parse::<u32>() {
+                    self.width = width;
+                    self.resize();
+                    self.grid = Grid::new(self.width, self.height);
+                } else {
+                    self.console.log(&format!("Invalid width: {}", event.value));
+                }
+                false
+            },
+            Msg::ResizeHeight(event) => {
+                if let Ok(height) = event.value.parse::<u32>() {
+                    self.height = height;
+                    self.resize();
+                    self.grid = Grid::new(self.width, self.height);
+                } else {
+                    self.console.log(&format!("Invalid height: {}", event.value));
+                }
+                false
+            },
         }
     }
 
@@ -251,6 +285,11 @@ impl Component for App {
                     <button class="game-button" onclick=self.link.callback(|_| Msg::Random)>{ "Random" }</button>
                     <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
                     <button class="game-button" onclick=self.link.callback(|_| Msg::Reset)>{ "Reset" }</button>
+                
+                    <label for="width">{ "Width"}</label>
+                    <input class="game-text" oninput=self.link.callback(|event| Msg::ResizeWidth(event)) placeholder=DEFAULT_WIDTH type="number" id="width" name="width" min=1/>
+                    <label for="height">{ "Height"}</label>
+                    <input class="game-text" oninput=self.link.callback(|event| Msg::ResizeHeight(event)) placeholder=DEFAULT_HEIGHT type="number" id="height" name="height" min=1/>
                 </div>
                 <div>
                     <canvas ref={self.node_ref.clone()} onclick=self.link.callback(|event| Msg::Toggle(event))/>
@@ -278,8 +317,8 @@ impl App {
         let canvas_left = (event.client_x() as f64 - rect.left()) * scale_y;
         let canvas_top = (event.client_y() as f64 - rect.top()) * scale_y;
       
-        let row = ((canvas_top / (CELL_SIZE as f64 + 1_f64)) as u32).min(HEIGHT - 1);
-        let col = ((canvas_left / (CELL_SIZE as f64 + 1_f64)) as u32).min(WIDTH - 1);
+        let row = ((canvas_top / (CELL_SIZE as f64 + 1_f64)) as u32).min(self.height - 1);
+        let col = ((canvas_left / (CELL_SIZE as f64 + 1_f64)) as u32).min(self.width - 1);
 
         self.grid.toggle_cell(row, col);
     }
@@ -297,20 +336,20 @@ impl App {
         ctx.set_stroke_style(&JsValue::from_str(GRID_COLOR));
     
         // Vertical lines.
-        for i in 0..=WIDTH {
+        for i in 0..=self.width {
             let x_value = i as f64 * (CELL_SIZE as f64 + 1_f64) + 1_f64;
             let y_start = 0_f64;
-            let y_end = (CELL_SIZE as f64 + 1_f64) * HEIGHT as f64 + 10_f64;
+            let y_end = (CELL_SIZE as f64 + 1_f64) * self.height as f64 + 10_f64;
 
             ctx.move_to(x_value, y_start);
             ctx.line_to(x_value, y_end);
         }
         
         // Horizontal lines.
-        for j in 0..=HEIGHT {
+        for j in 0..=self.height {
             let y_value = j as f64 * (CELL_SIZE as f64 + 1_f64) + 1_f64;
             let x_start = 0_f64;
-            let x_end = (CELL_SIZE as f64 + 1_f64) * WIDTH as f64 + 10_f64;
+            let x_end = (CELL_SIZE as f64 + 1_f64) * self.width as f64 + 10_f64;
 
             ctx.move_to(x_start, y_value);
             ctx.line_to(x_end, y_value);
@@ -331,8 +370,8 @@ impl App {
                 
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str(ALIVE_COLOR));
-        for row_idx in 0..HEIGHT {
-            for col_idx in 0..WIDTH {
+        for row_idx in 0..self.height {
+            for col_idx in 0..self.width {
                 let current = self.grid.get_cell(row_idx, col_idx);
                 let previous = self.grid.get_previous_cell(row_idx, col_idx);
 
@@ -345,8 +384,8 @@ impl App {
             }
         }        
         ctx.set_fill_style(&JsValue::from_str(DEAD_COLOR));
-        for row_idx in 0..HEIGHT {
-            for col_idx in 0..WIDTH { 
+        for row_idx in 0..self.height {
+            for col_idx in 0..self.width { 
                 let current = self.grid.get_cell(row_idx, col_idx);
                 let previous = self.grid.get_previous_cell(row_idx, col_idx);
 
@@ -362,6 +401,20 @@ impl App {
         ctx.stroke();
         let render_frame = self.link.callback(|_| Msg::Noop);
         let handle = RenderService::new().request_animation_frame(render_frame);
+        self.render_loop = Some(Box::new(handle));
+    }
+
+    fn resize(&mut self) {
+        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
+        canvas.set_width(self.width * (CELL_SIZE + 1) + 1);
+        canvas.set_height(self.height * (CELL_SIZE + 1) + 1);
+
+        self.canvas = Some(canvas);
+        let render_frame = self.link.callback(|_| Msg::Draw);
+        let handle = RenderService::new().request_animation_frame(render_frame);
+
+        // A reference to the handle must be stored, otherwise it is dropped and the render won't
+        // occur.
         self.render_loop = Some(Box::new(handle));
     }
 }
