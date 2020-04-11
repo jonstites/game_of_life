@@ -150,7 +150,13 @@ pub struct App {
     width: u32,
     console: ConsoleService,
     render_multiplier: u64,
-    steps_per_render: u64, 
+    steps_per_render: u64,
+    moving: bool,
+    has_moved: bool,
+    cell_offset_x: u32,
+    cell_offset_y: u32,
+    move_start_x: i32,
+    move_start_y: i32,
 }
 
 pub enum Msg {
@@ -161,11 +167,13 @@ pub enum Msg {
     Random,
     Reset,
     Step,
-    Toggle(MouseEvent),
     ResizeWidth(InputData),
     ResizeHeight(InputData),
     Slower,
     Faster,
+    StartMove(MouseEvent),
+    Move(MouseEvent),
+    EndMove(MouseEvent),
 }
 
 impl Component for App {
@@ -192,6 +200,12 @@ impl Component for App {
             console: ConsoleService::new(),
             render_multiplier: DEFAULT_RENDER_MULTIPLIER,
             steps_per_render: DEFAULT_TICKS_PER_RENDER,
+            moving: false,
+            has_moved: false,
+            cell_offset_x: 0,
+            cell_offset_y: 0,
+            move_start_x: 0,
+            move_start_y: 0,
         }
     }
 
@@ -202,8 +216,8 @@ impl Component for App {
 
         let canvas: HtmlCanvasElement = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
         
-        canvas.set_width(self.width * (CELL_SIZE) + 1);
-        canvas.set_height(self.width * (CELL_SIZE) + 1);
+        canvas.set_width(self.width * CELL_SIZE);
+        canvas.set_height(self.width * CELL_SIZE);
 
         self.canvas = Some(canvas);
         let render_frame = self.link.callback(|_| Msg::Draw);
@@ -226,7 +240,7 @@ impl Component for App {
                 false
             }
             Msg::Tick => {
-                if self.active {
+                if self.active && !self.moving {
                     
                     for _step in 0..self.steps_per_render {
                         self.grid.step();
@@ -250,11 +264,6 @@ impl Component for App {
             },
             Msg::Step => {
                 self.grid.step();                
-                self.draw_cells();
-                false
-            },
-            Msg::Toggle(event) => {
-                self.toggle_cell(event);
                 self.draw_cells();
                 false
             },
@@ -301,6 +310,42 @@ impl Component for App {
                 }
                 self.console.log(&format!("Steps per render: {} Render multiplier: {}", self.steps_per_render, self.render_multiplier));
                 false
+            },
+            Msg::StartMove(event) => {                
+                self.move_start_x = event.client_x();
+                self.move_start_y = event.client_y();
+                self.moving = true;
+                false
+            },
+            Msg::EndMove(event) => {
+                if !self.has_moved {
+                    self.toggle_cell(event);
+                    self.draw_cells();                        
+                }
+                self.moving = false;
+                self.has_moved = false;
+                false
+            },
+            Msg::Move(event) => {
+                if !self.moving {
+                    return false;
+                }
+
+                let (starting_cell_x, starting_cell_y) = self.page_coordinates_to_cell_coordinates(self.move_start_x, self.move_start_y);;
+                let (current_cell_x, current_cell_y) = self.page_coordinates_to_cell_coordinates(event.client_x(), event.client_y());
+                
+                if starting_cell_x != current_cell_x || starting_cell_y != current_cell_y {
+                    self.console.log(&format!("cur x: {} start x: {} cur y: {} start y: {}", event.client_x(), self.move_start_x, event.client_y(), self.move_start_y));
+                    self.cell_offset_x = (self.cell_offset_x + current_cell_x + 500 - starting_cell_x) % 500;
+                    self.cell_offset_y = (self.cell_offset_y + current_cell_y + 500 - starting_cell_y) % 500;
+                    self.move_start_x = event.client_x();
+                    self.move_start_y = event.client_y();
+                    self.console.log(&format!("starting cell x: {} current cell x: {} starting cell y: {} current cell y: {}", starting_cell_x, current_cell_x, starting_cell_y, current_cell_y));
+                    self.console.log(&format!("cell offset x: {} cell offset y: {}", self.cell_offset_x, self.cell_offset_y));
+                    self.draw_cells();
+                    self.has_moved = true;
+                }
+                false
             }
         }
     }
@@ -327,7 +372,12 @@ impl Component for App {
                     <input class="game-text" oninput=self.link.callback(|event| Msg::ResizeHeight(event)) placeholder=DEFAULT_HEIGHT type="number" id="height" name="height" min=1/>
                 </div>
                 <div>
-                    <canvas ref={self.node_ref.clone()} onclick=self.link.callback(|event| Msg::Toggle(event)) style="border: 1px solid black;"/>                    
+                    <canvas ref={self.node_ref.clone()} style="border: 1px solid black;"
+                     onmousedown=self.link.callback(|event| Msg::StartMove(event))
+                     onmouseup=self.link.callback(|event| Msg::EndMove(event))
+                     onmousemove=self.link.callback(|event| Msg::Move(event))>
+                    { "This text is displayed if your browser does not support HTML5 Canvas." }
+                    </canvas>                    
                 </div>
             </body>
         }
@@ -355,8 +405,15 @@ impl App {
     }
 
     fn canvas_coordinates_to_cell_coordinates(&self, canvas_x: f64, canvas_y: f64) -> (u32, u32) {
-        let row = ((canvas_y / (CELL_SIZE as f64 )) as u32).min(self.height - 1);
-        let col = ((canvas_x / (CELL_SIZE as f64 )) as u32).min(self.width - 1);
+        let unadjusted_row = (canvas_y / CELL_SIZE as f64) as u32;
+        let unadjusted_col = (canvas_x / CELL_SIZE as f64) as u32;
+
+        self.adjust_coords(unadjusted_row, unadjusted_col)
+    }
+
+    fn adjust_coords(&self, unadjusted_row: u32, unadjusted_col: u32) -> (u32, u32) {
+        let row = (unadjusted_row + self.cell_offset_x) % 500;
+        let col = (unadjusted_col + self.cell_offset_y) % 500;
         (row, col)
     }
 
@@ -383,37 +440,37 @@ impl App {
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str(ALIVE_COLOR));
 
-        for row_idx in 0..self.height {
-            for col_idx in 0..self.width {
-                let current = self.grid.get_cell(row_idx, col_idx);
-                let previous = self.grid.get_previous_cell(row_idx, col_idx);
+        for unadjusted_row in 0..self.width {
+            for unadjusted_col in 0..self.height {
+                let (row_idx, col_idx) = self.adjust_coords(unadjusted_row, unadjusted_col);
+                let cell = self.grid.get_cell(row_idx, col_idx);                
 
-                if current == Cell::Alive {
-                    ctx.rect(col_idx as f64 * (CELL_SIZE as f64) ,
-                    row_idx as f64* (CELL_SIZE as f64) ,
+                if cell == Cell::Alive {
+                    ctx.rect(unadjusted_col as f64 * (CELL_SIZE as f64) ,
+                    unadjusted_row as f64* (CELL_SIZE as f64),
                     CELL_SIZE as f64,
                     CELL_SIZE as f64);
-                } 
+                }
             }
         }
         ctx.fill();
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str(DEAD_COLOR));
-        for row_idx in 0..self.height {
-            for col_idx in 0..self.width { 
-                let current = self.grid.get_cell(row_idx, col_idx);
-                let previous = self.grid.get_previous_cell(row_idx, col_idx);
+        for unadjusted_row in 0..self.width {
+            for unadjusted_col in 0..self.height {
+                let (row_idx, col_idx) = self.adjust_coords(unadjusted_row, unadjusted_col);
+                let cell = self.grid.get_cell(row_idx, col_idx);                
 
-                if current == Cell::Dead {
-                    ctx.rect(col_idx as f64 * (CELL_SIZE as f64) ,
-                    row_idx as f64* (CELL_SIZE as f64),
+                if cell == Cell::Dead {
+                    ctx.rect(unadjusted_col as f64 * (CELL_SIZE as f64) ,
+                    unadjusted_row as f64 * (CELL_SIZE as f64),
                     CELL_SIZE as f64,
                     CELL_SIZE as f64);
                 }
             }
         }
 
-        ctx.fill();;
+        ctx.fill();
         let render_frame = self.link.callback(|_| Msg::Noop);
         let handle = RenderService::new().request_animation_frame(render_frame);
         self.render_loop = Some(Box::new(handle));
