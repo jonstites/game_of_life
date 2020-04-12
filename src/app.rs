@@ -1,258 +1,138 @@
-use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement, HtmlElement};
-use yew::{html, Callback, MouseEvent, Component, ComponentLink, Html, ShouldRender, NodeRef};
-use yew::services::{IntervalService, RenderService, Task};
-use yew::services::console::ConsoleService;
-use yew::html::InputData;
-use wasm_bindgen::JsValue;
 use wasm_bindgen::JsCast;
-use yew::components::Select;
+use wasm_bindgen::JsValue;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+use yew::services::{IntervalService, RenderService, Task};
+use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
 
-use fnv::FnvHashSet;
+use fnv::FnvHashMap;
 use std::time::Duration;
-extern crate js_sys;
+use std::collections::hash_map::Iter;
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct PackedCoordinates(u16, u16);
+pub struct PackedCells{
+    top: u32,
+    bottom: u32,
+}
 
-const DEFAULT_CELL_SIZE: u32 = 5; // px
-const CANVAS_MULTIPLIER: u32 = 5;
-const GRID_COLOR: &str = "#CCCCCC";
-const DEAD_COLOR: &str = "#FFFFFF";
-const ALIVE_COLOR: &str = "#FF0000";
-const DEFAULT_HEIGHT: u32 = 1000;
-const DEFAULT_WIDTH: u32 = 1000;
-const DEFAULT_RENDER_MULTIPLIER: u64 = 1;
-const DEFAULT_TICKS_PER_RENDER: u64 = 1;
-const MIN_MILLIS_PER_TICK: u64 = 33;
-const RANDOM_ALIVE: f64 = 0.2_f64;
+#[derive(PartialEq, Eq)]
+pub struct BlockRow(u64);
+#[derive(Debug, PartialEq, Eq)]
+pub struct Block(BlockRow, BlockRow, BlockRow, BlockRow);
+pub struct PackedCellMap(FnvHashMap<PackedCoordinates, PackedCells>);
 
-/*
-pub struct MortonPoint(u64);
+impl std::fmt::Debug for BlockRow {
 
-impl MortonPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:b}", self.0)        
+    }
+}
+impl PackedCoordinates {
 
-    pub fn new(x: u32, y: u32) -> MortonPoint {
-        let mut z = x as u64 | ((y as u64) << 32);
-        // TODO MIT license from someone else, reminder to give credit
-        z = (z & 0xffff00000000ffff) | ((z & 0x00000000ffff0000) << 16) | ((z & 0x0000ffff00000000) >> 16);
-        z = (z & 0xff0000ffff0000ff) | ((z & 0x0000ff000000ff00) << 8) | ((z & 0x00ff000000ff0000) >> 8);
-        z = (z & 0xf00ff00ff00ff00f) | ((z & 0x00f000f000f000f0) << 4) | ((z & 0x0f000f000f000f00) >> 4);
-        z = (z & 0xc3c3c3c3c3c3c3c3) | ((z & 0x0c0c0c0c0c0c0c0c) << 2) | ((z & 0x3030303030303030) >> 2);
-        z = (z & 0x9999999999999999) | ((z & 0x2222222222222222) << 1) | ((z & 0x4444444444444444) >> 1);
-        MortonPoint(z)
+    pub fn get_x(&self) -> u16 {
+        self.0
+    }
+
+    pub fn get_y(&self) -> u16 {
+        self.1
     }
 }
 
+impl Block {
+
+    pub fn new(
+        stagger_forward: bool, 
+        top_left: PackedCells, 
+        bottom_left: PackedCells, 
+        top_right: PackedCells, 
+        bottom_right: PackedCells) -> Block {
+
+        let row_1 = Block::concat_rows(stagger_forward, top_left.top, top_right.top);
+        let row_2 = Block::concat_rows(stagger_forward, top_left.bottom, top_right.bottom);
+        let row_3 = Block::concat_rows(stagger_forward, bottom_left.top, bottom_right.top);
+        let row_4 = Block::concat_rows(stagger_forward, bottom_left.bottom, bottom_right.bottom);
+        Block(row_1, row_2, row_3, row_4)
+    }
+
+    pub fn concat_rows(stagger_forward: bool, left: u32, right: u32) -> BlockRow {
+        let left = left as u64;
+        let right = right as u64;
+
+        if stagger_forward {
+            BlockRow(left | ((right & 0b11) << 32))
+        } else {
+            BlockRow(((left & (0b11 << 30)) >> 30) | (right << 2))
+        }
+    }
+}
+
+/*
+Packed Cells contain 2 32-cell rows (row major format)
+
+00 01 02 03 04 05 06 07 ... 1f
+20 21 22 23 24 25 26 27 ... 3f
+
+Four Packed Cells are used to create a new 2x32 Packed Cells for the
+next generation.
+
+This is done by reading a 4x4 region at a time and determining the
+next generation of the 2x2 inner region.
+*/
 pub struct Universe {
-    life: FnvHashSet<MortonPoint>,
-    might_change: FnvHashSet<MortonPoint>,
+    cells: PackedCellMap,
+    stagger_forward: bool,
 }
 
 impl Universe {
-
     pub fn new() -> Universe {
         Universe {
-            life: FnvHashSet::default(),
-            might_change: FnvHashSet::default(),
+            cells: PackedCellMap(FnvHashMap::default()),
+            stagger_forward: true,
         }
     }
 
-    pub fn step(&mut self) {
-
-        for point in might_change {
-            let count = self.count_neighbors(point);
-        }
-    }
-}
-*/
-pub struct Grid {
-    cells: FnvHashSet<(u32, u32)>,
-    active_cells: FnvHashSet<(u32, u32)>
-}
-
-impl Grid {
-    pub fn new() -> Grid {
-        Grid {
-            cells: FnvHashSet::default(),
-            active_cells: FnvHashSet::default(),
-        }
-    }
-    pub fn randomize_region(&mut self, x_start: u32, y_start: u32, x_end: u32, y_end: u32) {
-        let mut row = x_start;
-
-        while row != x_end.wrapping_add(1) {
-            let mut col = y_start;
-            while col != y_end.wrapping_add(1) {            
-                if js_sys::Math::random() < RANDOM_ALIVE {
-                    self.cells.insert((row, col));
-                    self.update_active(row, col);
-                } else {
-                    self.cells.remove(&(row, col));
-                    self.update_active(row, col);
-                }
-                col = col.wrapping_add(1);
-            }
-            row = row.wrapping_add(1);
-        }
+    pub fn add(&mut self, coordinates: PackedCoordinates, cells: PackedCells) {
+        self.cells.0.insert(coordinates, cells);
     }
     
-    pub fn update_active(&mut self, row: u32, col: u32) {
-        let mut cur_row = row.wrapping_sub(1);
-        
-        while cur_row != row.wrapping_add(2) {
-            let mut cur_col = col.wrapping_sub(1);
-            while cur_col != col.wrapping_add(2) {  
-                self.active_cells.insert((cur_row, cur_col));
-                cur_col = cur_col.wrapping_add(1);
-            }
-            cur_row = cur_row.wrapping_add(1);
-        }
+    pub fn get_packed_cells(&self) -> Iter<PackedCoordinates, PackedCells> {
+        self.cells.0.iter()
     }
 
-    pub fn cell_alive(&self, height: u32, width: u32) -> bool {
-        self.cells.contains(&(height, width))
-    }
 
-    pub fn toggle_cell(&mut self, height: u32, width: u32) {
-        if !self.cells.remove(&(height, width)) {
-            self.cells.insert((height, width));
-            self.update_active(height, width);
-        } 
-    }
-
-    pub fn reset(&mut self) {
-        self.cells.clear();
-        self.active_cells.clear();
-    }
-
-    pub fn step(&mut self) {
-        let mut newly_alive: FnvHashSet<(u32, u32)> = FnvHashSet::default();
-        let mut newly_dead: FnvHashSet<(u32, u32)> = FnvHashSet::default();
-
-        for &(row, col) in self.active_cells.iter() {
-
-            let num_neighbors = self.num_neighbors(row, col);
-            
-            let next_alive = match num_neighbors {
-                2 if self.cells.contains(&(row, col)) => {
-                    true
-                },
-                3 => {
-                    true
-                }
-                _ => false,
-            };
-
-            if next_alive && !self.cells.contains(&(row, col)) {
-                newly_alive.insert((row, col));
-            } else if !next_alive && self.cells.contains(&(row, col)) {
-                newly_dead.insert((row, col));
-            }
-        }
-        self.active_cells.clear();
-        for &(row, col) in newly_alive.iter().chain(newly_dead.iter()) {
-            self.update_active(row, col)
-        }
-        let not_killed: FnvHashSet<(u32, u32)> = self.cells.difference(&newly_dead).cloned().collect();
-        let next_iter: FnvHashSet<(u32, u32)> = not_killed.union(&newly_alive).cloned().collect();
-        self.cells = next_iter;
-    }
-
-    pub fn num_neighbors(&self, row: u32, col: u32) -> i32 {
-
-        let mut num_neighbors = 0;
-
-        let mut cur_row = row.wrapping_sub(1);
-        
-        while cur_row != row.wrapping_add(2) {
-            let mut cur_col = col.wrapping_sub(1);
-            while cur_col != col.wrapping_add(2) {  
-                if (cur_row != row) || (cur_col != col) {
-                    if self.cells.contains(&(cur_row, cur_col)) {
-                        num_neighbors += 1;
-                    }
-                }
-                cur_col = cur_col.wrapping_add(1);
-            }
-            cur_row = cur_row.wrapping_add(1);
-        }
-        num_neighbors
-    }
 }
-
 
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
     node_ref: NodeRef,
     render_loop: Option<Box<dyn Task>>,
     link: ComponentLink<Self>,
+    #[allow(dead_code)]
     timer: Box<dyn Task>,
-    active: bool,
-    grid: Grid,
-    last_rendered_cells: FnvHashSet<(u32, u32)>,
-    height: u32,
-    width: u32,
-    console: ConsoleService,
-    render_multiplier: u64,
-    steps_per_render: u64,
-    moving: bool,
-    has_moved: bool,
-    cell_offset_x: u32,
-    cell_offset_y: u32,
-    move_start_x: i32,
-    move_start_y: i32,
-    cell_size: u32,
+    universe: Universe,
 }
 
 pub enum Msg {
     Draw,
     Tick,
     Noop,
-    PlayPause,
-    Random,
-    Reset,
-    Step,
-    ResizeWidth(InputData),
-    ResizeHeight(InputData),
-    Slower,
-    Faster,
-    StartMove(MouseEvent),
-    Move(MouseEvent),
-    EndMove(MouseEvent),
-    Smaller,
-    Bigger,
 }
 
 impl Component for App {
     type Message = Msg;
     type Properties = ();
-    
+
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(DEFAULT_RENDER_MULTIPLIER * MIN_MILLIS_PER_TICK), link.callback(|_| Msg::Tick));
-
-        let width = DEFAULT_WIDTH;
-        let height = DEFAULT_HEIGHT;
+        let handle = interval.spawn(Duration::from_millis(1000), link.callback(|_| Msg::Tick));
 
         App {
             canvas: None,
-            link: link,
+            link,
             node_ref: NodeRef::default(),
             render_loop: None,
             timer: Box::new(handle),
-            active: false,
-            grid: Grid::new(),
-            last_rendered_cells: FnvHashSet::default(),
-            height,
-            width,
-            console: ConsoleService::new(),
-            render_multiplier: DEFAULT_RENDER_MULTIPLIER,
-            steps_per_render: DEFAULT_TICKS_PER_RENDER,
-            moving: false,
-            has_moved: false,
-            cell_offset_x: 0,
-            cell_offset_y: 0,
-            move_start_x: 0,
-            move_start_y: 0,
-            cell_size: DEFAULT_CELL_SIZE,
+            universe: Universe::new(),
         }
     }
 
@@ -262,9 +142,14 @@ impl Component for App {
         // for making GL calls.
 
         let canvas: HtmlCanvasElement = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-        
-        canvas.set_width(self.width * CANVAS_MULTIPLIER);
-        canvas.set_height(self.width * CANVAS_MULTIPLIER);
+
+        canvas.set_width(200);
+        canvas.set_height(200);
+
+        let start = PackedCoordinates(0_u16, 0_u16);
+        let cells = PackedCells{top:0b11101101101011111, bottom: 0};
+        self.universe.add(start, cells);
+        self.universe.add(PackedCoordinates(0_u16, 3_u16), PackedCells{top:!0b11101101101011111, bottom: 0});
 
         self.canvas = Some(canvas);
         let render_frame = self.link.callback(|_| Msg::Draw);
@@ -278,168 +163,26 @@ impl Component for App {
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::PlayPause => {
-                self.active = !self.active;
-                true
-            }
             Msg::Draw => {
                 self.draw_cells();
                 false
             }
             Msg::Tick => {
-                if self.active && !self.moving {
-                    
-                    for _step in 0..self.steps_per_render {
-                        self.grid.step();
-                    }
-                    self.draw_cells();
-                }
-                false
-            },
-            Msg::Random => {
-                self.randomize_region();
-                self.draw_cells();
-                false
-            }
-            Msg::Noop => {
-                false
-            },
-            Msg::Reset => {
-                self.grid.reset();
-                self.resize();
-                false
-            },
-            Msg::Step => {
-                self.grid.step();                
+                self.universe.stagger_forward = !self.universe.stagger_forward;
                 self.draw_cells();
                 false
             },
-            Msg::ResizeWidth(event) => {
-                if let Ok(width) = event.value.parse::<u32>() {
-                    self.width = width;
-                    self.resize();
-                    //self.grid = Grid::new(self.width, self.height);
-                } else {
-                    self.console.log(&format!("Invalid width: {}", event.value));
-                }
-                false
-            },
-            Msg::ResizeHeight(event) => {
-                if let Ok(height) = event.value.parse::<u32>() {
-                    self.height = height;
-                    self.resize();
-                    //self.grid = Grid::new(self.width, self.height);
-                } else {
-                    self.console.log(&format!("Invalid height: {}", event.value));
-                }
-                false
-            },
-            Msg::Slower => {
-                if self.steps_per_render > 1 {
-                    self.steps_per_render -= 1;
-                } else {
-                    self.render_multiplier += 1;
-                    let mut interval = IntervalService::new();
-                    let handle = interval.spawn(Duration::from_millis(self.render_multiplier * MIN_MILLIS_PER_TICK), self.link.callback(|_| Msg::Tick));
-                    self.timer = Box::new(handle);            
-                }
-                self.console.log(&format!("Steps per render: {} Render multiplier: {}", self.steps_per_render, self.render_multiplier));
-                false
-            },
-            Msg::Faster => {
-                if self.render_multiplier > 1 {
-                    self.render_multiplier -= 1;
-                    let mut interval = IntervalService::new();
-                    let handle = interval.spawn(Duration::from_millis(self.render_multiplier * MIN_MILLIS_PER_TICK), self.link.callback(|_| Msg::Tick));
-                    self.timer = Box::new(handle);  
-                } else {
-                    self.steps_per_render += 1;
-                }
-                self.console.log(&format!("Steps per render: {} Render multiplier: {}", self.steps_per_render, self.render_multiplier));
-                false
-            },
-            Msg::StartMove(event) => {                
-                self.move_start_x = event.client_x();
-                self.move_start_y = event.client_y();
-                self.moving = true;
-                false
-            },
-            Msg::EndMove(event) => {
-                if !self.has_moved {
-                    self.toggle_cell(event);
-                    self.draw_cells();                        
-                }
-                self.moving = false;
-                self.has_moved = false;
-                false
-            },
-            Msg::Move(event) => {
-                if !self.moving {
-                    return false;
-                }
-
-                let (starting_cell_x, starting_cell_y) = self.page_coordinates_to_cell_coordinates(self.move_start_x, self.move_start_y);
-                let (current_cell_x, current_cell_y) = self.page_coordinates_to_cell_coordinates(event.client_x(), event.client_y());
-                
-                if starting_cell_x != current_cell_x || starting_cell_y != current_cell_y {
-                    self.console.log(&format!("cur x: {} start x: {} cur y: {} start y: {}", event.client_x(), self.move_start_x, event.client_y(), self.move_start_y));
-                    self.cell_offset_x = self.cell_offset_x.wrapping_add(starting_cell_x).wrapping_sub(current_cell_x);
-                    self.cell_offset_y = self.cell_offset_y.wrapping_add(starting_cell_y).wrapping_sub(current_cell_y);
-                    self.move_start_x = event.client_x();
-                    self.move_start_y = event.client_y();
-                    self.console.log(&format!("starting cell x: {} current cell x: {} starting cell y: {} current cell y: {}", starting_cell_x, current_cell_x, starting_cell_y, current_cell_y));
-                    self.console.log(&format!("cell offset x: {} cell offset y: {}", self.cell_offset_x, self.cell_offset_y));
-                    self.last_rendered_cells = FnvHashSet::default();
-                    self.resize();
-                    self.draw_cells();
-                    self.has_moved = true;
-                }
-                false
-            },
-            Msg::Smaller => {
-                self.cell_size = self.cell_size.saturating_sub(1);
-                self.draw_cells();
-                false
-            },
-            Msg::Bigger => {
-                self.cell_size += 1;
-                self.draw_cells();
-                false
-            }
+            Msg::Noop => false,
         }
     }
 
     fn view(&self) -> Html {
-        let play_or_pause_text = if self.active {
-            "Pause"
-        } else {
-            "Play"
-        };
-
         html! {
-            <body                 onmouseup=self.link.callback(|event| Msg::EndMove(event))>
-                <div class="game-buttons">
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::PlayPause)> { play_or_pause_text }</button>
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::Random)>{ "Random" }</button>
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::Reset)>{ "Reset" }</button>
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::Slower)>{ "Slower" }</button>
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::Faster)>{ "Faster" }</button>
-                    /*<button class="game-button" onclick=self.link.callback(|_| Msg::Smaller)>{ "Smaller" }</button>
-                    <button class="game-button" onclick=self.link.callback(|_| Msg::Bigger)>{ "Bigger" }</button>
-                    <label for="width">{ "Width"}</label>
-                    <input class="game-text" oninput=self.link.callback(|event| Msg::ResizeWidth(event)) placeholder=DEFAULT_WIDTH type="number" id="width" name="width" min=1/>
-                    <label for="height">{ "Height"}</label>
-                    <input class="game-text" oninput=self.link.callback(|event| Msg::ResizeHeight(event)) placeholder=DEFAULT_HEIGHT type="number" id="height" name="height" min=1/>
-                    */
-                </div>
+            <body>
                 <div>
-                    <canvas ref={self.node_ref.clone()} style="border: 1px solid black;"
-                     onmousedown=self.link.callback(|event| Msg::StartMove(event))
-                     
-                     onmousemove=self.link.callback(|event| Msg::Move(event))>
+                    <canvas ref={self.node_ref.clone()} style="border: 1px solid black;">
                     { "This text is displayed if your browser does not support HTML5 Canvas." }
-                    </canvas>                    
+                    </canvas>
                 </div>
             </body>
         }
@@ -447,117 +190,49 @@ impl Component for App {
 }
 
 impl App {
-
-    fn cell_in_canvas(&self, ctx: &CanvasRenderingContext2d, row: u32, col: u32) -> bool {
-        let (adj_row, adj_col) = self.adjust_coords(row, col);
-        let y_pt = adj_row as f64 * self.cell_size as f64;
-        let x_pt = adj_col as f64 * self.cell_size as f64;
-        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-        let canvas_width = canvas.width() as f64;
-        let canvas_height = canvas.height() as f64;
-
-        x_pt <= canvas_height && y_pt <= canvas_width
-    }
-
-    fn randomize_region(&mut self) {
-        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-        let canvas_width = canvas.width() as f64;
-        let canvas_height = canvas.height() as f64;
-
-        let (start_x, start_y) = self.canvas_coordinates_to_cell_coordinates(0_f64, 0_f64);
-        let (end_x, end_y) = self.canvas_coordinates_to_cell_coordinates(canvas_width, canvas_height);
-        self.grid.randomize_region(start_x, start_y, end_x, end_y);
-    }
-
-    fn page_coordinates_to_canvas_coordinates(&self, page_x: i32, page_y: i32) -> (f64, f64) {
-        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-        let canvas_width = canvas.width() as f64;
-        let canvas_height = canvas.height() as f64;
-
-        let rect = canvas.dyn_into::<Element>()
-            .expect("cant coerce into element")
-            .get_bounding_client_rect();
-
-        let scale_x = canvas_width / rect.width();
-        let scale_y = canvas_height / rect.height();
-
-        let canvas_left = (page_x as f64 - rect.left()) * scale_x;
-        let canvas_top = (page_y as f64 - rect.top()) * scale_y;
-
-        (canvas_left, canvas_top)
-    }
-
-    fn canvas_coordinates_to_cell_coordinates(&self, canvas_x: f64, canvas_y: f64) -> (u32, u32) {
-        let unadjusted_row = (canvas_y / self.cell_size as f64) as u32;
-        let unadjusted_col = (canvas_x / self.cell_size as f64) as u32;
-
-        self.adjust_coords(unadjusted_row, unadjusted_col)
-    }
-
-    fn adjust_coords(&self, unadjusted_row: u32, unadjusted_col: u32) -> (u32, u32) {
-        let row = unadjusted_row.wrapping_add(self.cell_offset_x);
-        let col = unadjusted_col.wrapping_add(self.cell_offset_y);
-        (row, col)
-    }
-
-    fn page_coordinates_to_cell_coordinates(&self, page_x: i32, page_y: i32) -> (u32, u32) {
-        let (canvas_x, canvas_y) = self.page_coordinates_to_canvas_coordinates(page_x, page_y);
-        self.canvas_coordinates_to_cell_coordinates(canvas_x, canvas_y)
-    }
-
-    fn toggle_cell(&mut self, event: MouseEvent) {        
-        let (row, col) = self.page_coordinates_to_cell_coordinates(event.client_x(), event.client_y());
-        self.grid.toggle_cell(row, col);
-    }
-
-    fn draw_cell(&self, ctx: &CanvasRenderingContext2d, row: u32, col: u32) {
-        let (adj_row, adj_col) = self.adjust_coords(row, col);
-
-        ctx.rect(
-            adj_col as f64 * (self.cell_size as f64) ,
-            adj_row as f64 * (self.cell_size as f64),
-            self.cell_size as f64,
-            self.cell_size as f64);
-    }
-
     fn draw_cells(&mut self) {
-
-        let ctx = self.canvas.as_ref()
+        let ctx = self
+            .canvas
+            .as_ref()
             .expect("Canvas not loaded")
             .get_context("2d")
             .expect("Can't get 2d canvas.")
             .unwrap()
             .dyn_into::<CanvasRenderingContext2d>()
             .unwrap();
-                
-        ctx.begin_path();
-        ctx.set_fill_style(&JsValue::from_str(DEAD_COLOR));
 
-        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-        let canvas_width = canvas.width() as f64;
-        let canvas_height = canvas.height() as f64;
-        ctx.fill_rect(0_f64, 0_f64, canvas_width, canvas_height);
-        self.console.log("whitespace");
+        let cell_size = 10;
 
-        let newly_dead: FnvHashSet<_> = self.last_rendered_cells.difference(&self.grid.cells).cloned().collect();
-        let newly_alive: FnvHashSet<_> = self.grid.cells.difference(&self.last_rendered_cells).cloned().collect();
+        
+        ctx.set_fill_style(&JsValue::from_str("white"));
 
-        for (row, col) in newly_dead {
-
-            if self.cell_in_canvas(&ctx, row, col) {
-                self.draw_cell(&ctx, row, col);
-                self.last_rendered_cells.remove(&(row, col));
-            }
-        }
-        ctx.fill();
+        ctx.fill_rect(0_f64, 0_f64, 500_f64, 500_f64);
 
         ctx.begin_path();
-        ctx.set_fill_style(&JsValue::from_str(ALIVE_COLOR));
-    
-        for (row, col) in newly_alive {
-            if self.cell_in_canvas(&ctx, row, col) {
-                self.draw_cell(&ctx, row, col);
-                self.last_rendered_cells.insert((row, col));
+        ctx.set_fill_style(&JsValue::from_str("red"));
+
+
+        for (coordinates, packed_cells) in self.universe.get_packed_cells() {
+            let mut num = 0;
+            let mut cells = packed_cells.top as u64;
+            while cells > 0 {
+                if cells & 1_u64 == 1_u64 {
+                    let mut x_start = ((coordinates.get_x() * 64 + num) * cell_size) as f64;
+                    let mut y_start = (coordinates.get_y() * cell_size) as f64;
+                    if !self.universe.stagger_forward {
+                        x_start -= cell_size as f64;
+                        y_start -= cell_size as f64;
+                    }
+
+                    ctx.rect(
+                        x_start,
+                        y_start,
+                        cell_size as f64,
+                        cell_size as f64,
+                    );
+                }
+                cells >>= 1;
+                num += 1;
             }
         }
         ctx.fill();
@@ -566,18 +241,39 @@ impl App {
         let handle = RenderService::new().request_animation_frame(render_frame);
         self.render_loop = Some(Box::new(handle));
     }
+}
 
-    fn resize(&mut self) {
-        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
-        canvas.set_width(self.width * CANVAS_MULTIPLIER);
-        canvas.set_height(self.height * CANVAS_MULTIPLIER);
+#[cfg(test)]
+mod test {
 
-        self.canvas = Some(canvas);
-        let render_frame = self.link.callback(|_| Msg::Draw);
-        let handle = RenderService::new().request_animation_frame(render_frame);
+    use super::*;
 
-        // A reference to the handle must be stored, otherwise it is dropped and the render won't
-        // occur.
-        self.render_loop = Some(Box::new(handle));
+    #[test]
+    fn test_rows_concat() {
+        let left = u32::max_value();
+        let right = 0b10;
+
+        let expected = BlockRow(0b10_1111_1111_1111_1111_1111_1111_1111_1111);
+        assert_eq!(expected, Block::concat_rows(true, left, right));
+
+        let expected = BlockRow(0b1011);
+        assert_eq!(expected, Block::concat_rows(false, left, right));
+
+        let expected = 33;
+        assert_eq!(expected, Block::concat_rows(true, left, right).0.count_ones());
+        let expected = 3;
+        assert_eq!(expected, Block::concat_rows(false, left, right).0.count_ones());
+
     }
+
+    /*#[test]
+    fn test_new_block_forward() {
+        let top_left = PackedCells{top: 0b1111, bottom: 0b11110000};
+        let bottom_left = PackedCells{top: 0b10, bottom: }
+        let top_right = PackedCells(0b10 << 30);
+        let bottom_right = PackedCells(0b01 << 30);
+
+        let expected = Block(0b111110, 0b100, 0b1111000001, 0);
+        assert_eq!(expected, Block::new(true, top_left, bottom_left, top_right, bottom_right));
+    }*/
 }
