@@ -68,34 +68,34 @@ impl StepTable {
         let mut lookup = Vec::with_capacity(512);
 
         for idx in 0..512 {
-            let target_cell_masked = idx & 0b111101111 as u32;
+            let target_cell_masked = idx & 0b111_101_111 as u32;
             let num_neighbors = target_cell_masked.count_ones();
-            let alive = b.contains(&num_neighbors) || (s.contains(&num_neighbors) && (idx & 0b10000 == 1));
+            let alive = b.contains(&num_neighbors) || (s.contains(&num_neighbors) && (idx & 0b000_010_000 != 0));
             if alive {
                 lookup.push(1_u8);
             } else {
                 lookup.push(0_u8);
             }
-            println!("{:b}, {:b} {}", idx, target_cell_masked, alive);
+            println!("{:b}, {:b} {} {}", idx, target_cell_masked, alive, num_neighbors);
         }
         lookup.into_boxed_slice()
     }
 
     pub fn step(
         &self,
-        stagger_right: bool, 
+        staggerred_right: bool, 
         r1: PackedCells, r2: PackedCells,
         r3: PackedCells, r4: PackedCells,
         r5: PackedCells, r6: PackedCells
     ) -> PackedCells {
 
-        if stagger_right {            
+        if staggerred_right {            
             let mut new_cells = 0_u64;
 
             for offset in 0..=61 {
                 let region = ((r1.0 & (0b111 << offset)) >> offset) // top 1x3 row
-                    | ((r1.0 & (0b111 << offset)) >> offset << 3) // middle 1x3 row
-                    | ((r2.0 & (0b111 << offset)) >> offset << 6); // bottom 1x3 row
+                    | ((r2.0 & (0b111 << offset)) >> offset << 3) // middle 1x3 row
+                    | ((r3.0 & (0b111 << offset)) >> offset << 6); // bottom 1x3 row
                 new_cells |= (self.lookup(region) as u64) << offset;
             }
             
@@ -107,12 +107,31 @@ impl StepTable {
             let second_rightmost = (r1.0 >> 62) | ((r4.0 & 0b1) << 2)
                 | ((r2.0 >> 62) << 3) | ((r5.0 & 0b1) << 5)
                 | ((r3.0 >> 62) << 6) | ((r6.0 & 0b1) << 8);
-                
+            
             new_cells |= (self.lookup(second_rightmost) as u64) << 63;
-
+            
             PackedCells(new_cells)
         } else {
-            PackedCells(0)
+            let mut new_cells = 0_u64;
+
+            let leftmost = (r1.0 >> 62) | ((r4.0 & 0b1) << 2) 
+                | ((r2.0 >> 62) << 3) | ((r5.0 & 0b1) << 5)
+                | ((r3.0 >> 62) << 6) | ((r6.0 & 0b1) << 8);
+            new_cells |= self.lookup(leftmost) as u64;
+
+            let second_leftmost = (r1.0 >> 63) | ((r4.0 & 0b11) << 1)
+                | ((r2.0 >> 63) << 3) | ((r5.0 & 0b11) << 4)
+                | ((r3.0 >> 63) << 6) | ((r6.0 & 0b11) << 7);
+            new_cells |= (self.lookup(second_leftmost) as u64) << 1;
+            
+            for offset in 0..=61 {
+                let region = (r4.0 & (0b111 << offset) >> offset) // top 1x3 row
+                | (r5.0 & (0b111 << offset) >> offset << 3) // middle 1x3 row
+                | (r6.0 & (0b111 << offset) >> offset << 6); // bottom 1x3 row
+                println!("offset: {} {:b}", offset, region);
+                new_cells |= (self.lookup(region) as u64) << offset << 2;
+            }
+            PackedCells(new_cells)
         }        
     }
 
@@ -135,14 +154,14 @@ next generation of the 2x2 inner region.
 */
 pub struct Universe {
     cells: PackedCellMap,
-    stagger_forward: bool,
+    staggerred_right: bool,
 }
 
 impl Universe {
     pub fn new() -> Universe {
         Universe {
             cells: PackedCellMap(FnvHashMap::default()),
-            stagger_forward: true,
+            staggerred_right: true,
         }
     }
 
@@ -223,7 +242,7 @@ impl Component for App {
                 false
             }
             Msg::Tick => {
-                self.universe.stagger_forward = !self.universe.stagger_forward;
+                self.universe.staggerred_right = !self.universe.staggerred_right;
                 self.draw_cells();
                 false
             },
@@ -274,7 +293,7 @@ impl App {
                 if cells & 1_u64 == 1_u64 {
                     let mut x_start = ((coordinates.get_x() * 64 + num) * cell_size) as f64;
                     let mut y_start = (coordinates.get_y() * cell_size) as f64;
-                    if !self.universe.stagger_forward {
+                    if !self.universe.staggerred_right {
                         x_start -= cell_size as f64;
                         y_start -= cell_size as f64;
                     }
@@ -304,49 +323,32 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_lookup() {
+        let lookup = StepTable::new(vec![3], vec![2]);
+
+        assert_eq!(0b1, lookup.lookup(0b010_010_010));
+        assert_eq!(0b1, lookup.lookup(0b111_000_000));
+        assert_eq!(0b0, lookup.lookup(0b111_111_111));
+        assert_eq!(0b0, lookup.lookup(0b111_000_001));
+    }
+
+    #[test]
     fn test_step() {
         let r1 = PackedCells(0b1);
         let r4 = PackedCells(0); 
         let lookup = StepTable::new(vec![3], vec![2]);
-        //println!("{:?}", lookup.0);
         let expected = PackedCells(0b1);
 
         assert_eq!(expected, lookup.step(true, r1, r1, r1, r4, r4, r4));
 
-        let expected = PackedCells(0x8000000000000000);
+        let expected = PackedCells(0xc000000000000000);
         assert_eq!(expected, lookup.step(true, r4, r4, r4, r1, r1, r1));
+
+        let r1 = PackedCells(0x8000000000000000);
+        let expected = PackedCells(0b11);
+        assert_eq!(expected, lookup.step(false, r1, r1, r1, r4, r4, r4));
+
+        let expected = PackedCells(0);
+        assert_eq!(expected, lookup.step(false, r4, r4, r4, r1, r1, r1));
     }
-
-    /*#[test]
-    fn test_rows_concat() {
-        let left = u32::max_value();
-        let right = 0b10;
-
-        let expected = BlockRow(0b10_1111_1111_1111_1111_1111_1111_1111_1111);
-        assert_eq!(expected, Block::concat_rows(true, left, right));
-
-        let expected = BlockRow(0b1011);
-        assert_eq!(expected, Block::concat_rows(false, left, right));
-
-        let expected = 33;
-        assert_eq!(expected, Block::concat_rows(true, left, right).0.count_ones());
-        let expected = 3;
-        assert_eq!(expected, Block::concat_rows(false, left, right).0.count_ones());
-
-    }
-
-    #[test]
-    fn test_new_block_forward() {
-        let top_left = PackedCells{top: 0b1111, bottom: 0b11110000};
-        let bottom_left = PackedCells{top: 0b10, bottom: 0};
-        let top_right = PackedCells{top:0b10, bottom: 0};
-        let bottom_right = PackedCells{top: 0b01 << 30, bottom: 0};
-
-        let expected_r1 = Block::concat_rows(true, top_left.top, top_right.top);
-        let expected_r2 = Block::concat_rows(true, top_left.bottom, top_right.bottom);
-        let expected_r3 = Block::concat_rows(true, bottom_left.top, bottom_right.top);
-        let expected_r4 = Block::concat_rows(true, bottom_left.bottom, bottom_right.bottom);
-        let expected = Block(expected_r1, expected_r2, expected_r3, expected_r4);
-        assert_eq!(expected, Block::new(true, top_left, bottom_left, top_right, bottom_right));
-    }*/
 }
