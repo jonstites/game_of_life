@@ -1,7 +1,7 @@
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
-use yew::services::{IntervalService, RenderService, Task};
+use yew::services::{ConsoleService, IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
 
 use fnv::FnvHashMap;
@@ -14,14 +14,21 @@ use std::collections::hash_map::Iter;
  Smallest dimension is ~2 billion in size
  It wraps at 0, u32::max_value() + 1 so there are no weird edge effects
 */
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PackedCoordinates(u32, u32);
 
 // Represents one 1x64 row of cells
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct PackedCells(u64);
 
 impl std::fmt::Debug for PackedCells {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:b}", self.0)
+    }
+}
+
+impl std::fmt::Display for PackedCells {
 
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:b}", self.0)
@@ -46,6 +53,22 @@ Bits are arranged as:
 pub struct StepTable(Box<[u8]>);
 
 pub struct PackedCellMap(FnvHashMap<PackedCoordinates, PackedCells>);
+
+impl std::ops::Add for PackedCoordinates {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0.wrapping_add(other.0), self.1.wrapping_add(other.1))
+    }
+}
+
+impl std::ops::Sub for PackedCoordinates {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self(self.0.wrapping_sub(other.0), self.1.wrapping_sub(other.1))
+    }
+}
 
 impl PackedCoordinates {
 
@@ -89,7 +112,7 @@ impl StepTable {
         r5: PackedCells, r6: PackedCells
     ) -> PackedCells {
 
-        if staggerred_right {            
+        if !staggerred_right {            
             let mut new_cells = 0_u64;
 
             for offset in 0..=61 {
@@ -123,7 +146,9 @@ impl StepTable {
                 | ((r2.0 >> 63) << 3) | ((r5.0 & 0b11) << 4)
                 | ((r3.0 >> 63) << 6) | ((r6.0 & 0b11) << 7);
             new_cells |= (self.lookup(second_leftmost) as u64) << 1;
-            
+            println!("r1: {:?} r2: {:?} r3: {:?} r4: {:?} r5: {:?} r6: {:?}", r1, r2, r3, r4, r5, r6);
+            println!("leftmost: {:b}", leftmost);
+            println!("second leftmost: {:b}", second_leftmost);
             for offset in 0..=61 {
                 let region = (r4.0 & (0b111 << offset) >> offset) // top 1x3 row
                 | (r5.0 & (0b111 << offset) >> offset << 3) // middle 1x3 row
@@ -154,23 +179,104 @@ next generation of the 2x2 inner region.
 */
 pub struct Universe {
     cells: PackedCellMap,
+    staggered_cells: PackedCellMap,
     staggerred_right: bool,
+    step_table: StepTable,
 }
 
 impl Universe {
     pub fn new() -> Universe {
         Universe {
             cells: PackedCellMap(FnvHashMap::default()),
-            staggerred_right: true,
+            staggered_cells: PackedCellMap(FnvHashMap::default()),
+            staggerred_right: false,
+            step_table: StepTable::new(vec!(3), vec!(2)),
+        }
+    }
+
+    pub fn step(&mut self) {
+        let mut next_gen = PackedCellMap(FnvHashMap::default());
+        for (&coordinates, &cells) in self.get_packed_cells() {
+            let new_cells = self.new_cells(coordinates, cells);
+            next_gen.0.insert(coordinates, new_cells);
+            Universe::activate_neighbors(&mut next_gen, coordinates);
+            ConsoleService::new().log(&format!("got cells {:?} {:?} ", new_cells, cells));
+        }
+
+        ConsoleService::new().log(&format!("cells {:?}", self.cells.0));
+        ConsoleService::new().log(&format!("s cells{:?}", self.staggered_cells.0));
+
+        ConsoleService::new().log(&format!("nextgen {:?}", next_gen.0));
+        if self.staggerred_right {
+            self.cells = next_gen;
+        } else {
+            self.staggered_cells = next_gen;
+        }
+        self.staggerred_right = !self.staggerred_right;
+        ConsoleService::new().log(&format!("s{:?}", self.staggerred_right));
+
+    }
+
+    pub fn new_cells(&self, coordinates: PackedCoordinates, cells: PackedCells) -> PackedCells {
+        if self.staggerred_right {
+            let r1 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 1))).cloned().unwrap_or(PackedCells::default());
+            let r2 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
+            let r3 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 0) + PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
+            let r4 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
+            let r5 = cells;
+            let r6 = self.staggered_cells.0.get(&(coordinates + PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
+            ConsoleService::new().log(&format!("staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
+            self.step_table.step(self.staggerred_right, r1, r2, r3, r4, r5, r6)
+        } else {
+            let r1 = self.cells.0.get(&(coordinates - PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
+            let r2 = cells;
+            let r3 = self.cells.0.get(&(coordinates + PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
+            let r4 = self.cells.0.get(&(coordinates - PackedCoordinates(0, 1) + PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
+            let r5 = self.cells.0.get(&(coordinates + PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
+            let r6 = self.cells.0.get(&(coordinates + PackedCoordinates(1, 1))).cloned().unwrap_or(PackedCells::default());
+            ConsoleService::new().log(&format!("not staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
+
+            self.step_table.step(self.staggerred_right, r1, r2, r3, r4, r5, r6)
         }
     }
 
     pub fn add(&mut self, coordinates: PackedCoordinates, cells: PackedCells) {
-        self.cells.0.insert(coordinates, cells);
+        if self.staggerred_right {
+            self.staggered_cells.0.insert(coordinates, cells);
+            Universe::activate_neighbors(&mut self.staggered_cells, coordinates);        
+        } else {            
+            self.cells.0.insert(coordinates, cells);
+            Universe::activate_neighbors(&mut self.cells, coordinates);                    
+        }
+        
+    }
+
+    pub fn activate_neighbors(hash: &mut PackedCellMap, coordinates: PackedCoordinates) {
+
+        let neighbor_coordinates = vec!(
+            coordinates + PackedCoordinates(1, 0),
+            coordinates + PackedCoordinates(1, 1),
+            coordinates + PackedCoordinates(0, 1),
+            coordinates - PackedCoordinates(1, 0),
+            coordinates - PackedCoordinates(1, 1),
+            coordinates - PackedCoordinates(0, 1),
+            coordinates + PackedCoordinates(1, 0) - PackedCoordinates(0, 1),
+            coordinates + PackedCoordinates(0, 1) - PackedCoordinates(1, 0),
+        );
+
+        for neighbor in neighbor_coordinates.into_iter() {
+            if !hash.0.contains_key(&neighbor) {
+                hash.0.insert(neighbor, PackedCells::default());
+            }
+        }
     }
     
     pub fn get_packed_cells(&self) -> Iter<PackedCoordinates, PackedCells> {
-        self.cells.0.iter()
+        if self.staggerred_right{
+            self.staggered_cells.0.iter()
+        } else {
+            self.cells.0.iter()
+        }
     }
 
 
@@ -198,7 +304,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(1000), link.callback(|_| Msg::Tick));
+        let handle = interval.spawn(Duration::from_millis(5000), link.callback(|_| Msg::Tick));
 
         App {
             canvas: None,
@@ -217,14 +323,36 @@ impl Component for App {
 
         let canvas: HtmlCanvasElement = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
 
-        canvas.set_width(200);
-        canvas.set_height(200);
+        canvas.set_width(1000);
+        canvas.set_height(1000);
 
-        let start = PackedCoordinates(0_u32, 0_u32);
-        let cells = PackedCells(0b11101101101011111);
+        /*let start = PackedCoordinates(1_u32, 10_u32);
+        let cells = PackedCells(0b1);
         self.universe.add(start, cells);
-        self.universe.add(PackedCoordinates(0_u32, 3_u32), PackedCells(!0b11101101101011111));
-
+        let start = PackedCoordinates(1_u32, 11_u32);
+        let cells = PackedCells(0b1);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 12_u32);
+        let cells = PackedCells(0b1);
+        self.universe.add(start, cells);*/
+        let start = PackedCoordinates(1_u32, 20_u32);
+        let cells = PackedCells(0b011);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 21_u32);
+        let cells = PackedCells(0b11);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 20_u32);
+        let cells = PackedCells(0b11);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 21_u32);
+        let cells = PackedCells(0b11);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(0_u32, 20_u32);
+        let cells = PackedCells(0b111 << 63);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(0_u32, 21_u32);
+        let cells = PackedCells(0b111);
+        self.universe.add(start, cells);
         self.canvas = Some(canvas);
         let render_frame = self.link.callback(|_| Msg::Draw);
         let handle = RenderService::new().request_animation_frame(render_frame);
@@ -242,7 +370,7 @@ impl Component for App {
                 false
             }
             Msg::Tick => {
-                self.universe.staggerred_right = !self.universe.staggerred_right;
+                self.universe.step();
                 self.draw_cells();
                 false
             },
@@ -275,12 +403,15 @@ impl App {
             .dyn_into::<CanvasRenderingContext2d>()
             .unwrap();
 
-        let cell_size = 10;
+        let cell_size = 3;
 
-        
+        ctx.begin_path();
+        if self.universe.staggerred_right {
+            ctx.set_fill_style(&JsValue::from_str("blue"));
+        }
         ctx.set_fill_style(&JsValue::from_str("white"));
 
-        ctx.fill_rect(0_f64, 0_f64, 500_f64, 500_f64);
+        ctx.fill_rect(0_f64, 0_f64, 2000_f64, 2000_f64);
 
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str("red"));
@@ -294,8 +425,7 @@ impl App {
                     let mut x_start = ((coordinates.get_x() * 64 + num) * cell_size) as f64;
                     let mut y_start = (coordinates.get_y() * cell_size) as f64;
                     if !self.universe.staggerred_right {
-                        x_start -= cell_size as f64;
-                        y_start -= cell_size as f64;
+                        x_start -= cell_size as f64;                        
                     }
 
                     ctx.rect(
@@ -351,4 +481,18 @@ mod test {
         let expected = PackedCells(0);
         assert_eq!(expected, lookup.step(false, r4, r4, r4, r1, r1, r1));
     }
+    /*
+
+    #[test]
+    fn test_new_cells() {
+        let mut universe = Universe::new();
+        universe.add(PackedCoordinates(1, 1), PackedCells(0b111));
+        universe.step();
+        let expected = Some(&PackedCells(0b1));
+        println!("{:?}", universe.cells.0);
+        println!("{:?}", universe.staggered_cells.0);
+        assert_eq!(expected, universe.staggered_cells.0.get(&PackedCoordinates(1, 1)));
+        assert_eq!(expected,universe.staggered_cells.0.get(&PackedCoordinates(1, 2)));
+        assert_eq!(expected,universe.staggered_cells.0.get(&PackedCoordinates(1, 0)));
+    }*/
 }
