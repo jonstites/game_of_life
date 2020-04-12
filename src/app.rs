@@ -17,31 +17,64 @@ const CANVAS_MULTIPLIER: u32 = 5;
 const GRID_COLOR: &str = "#CCCCCC";
 const DEAD_COLOR: &str = "#FFFFFF";
 const ALIVE_COLOR: &str = "#FF0000";
-const DEFAULT_HEIGHT: u32 = 150;
-const DEFAULT_WIDTH: u32 = 150;
+const DEFAULT_HEIGHT: u32 = 1000;
+const DEFAULT_WIDTH: u32 = 1000;
 const DEFAULT_RENDER_MULTIPLIER: u64 = 1;
 const DEFAULT_TICKS_PER_RENDER: u64 = 1;
 const MIN_MILLIS_PER_TICK: u64 = 33;
 const RANDOM_ALIVE: f64 = 0.2_f64;
 
-pub struct Grid {
-    // It would be nice to switch to Morton space
-    cells: FnvHashSet<(u32, u32)>,
-    active_cells: FnvHashSet<(u32, u32)>,
+/*
+pub struct MortonPoint(u64);
+
+impl MortonPoint {
+
+    pub fn new(x: u32, y: u32) -> MortonPoint {
+        let mut z = x as u64 | ((y as u64) << 32);
+        // TODO MIT license from someone else, reminder to give credit
+        z = (z & 0xffff00000000ffff) | ((z & 0x00000000ffff0000) << 16) | ((z & 0x0000ffff00000000) >> 16);
+        z = (z & 0xff0000ffff0000ff) | ((z & 0x0000ff000000ff00) << 8) | ((z & 0x00ff000000ff0000) >> 8);
+        z = (z & 0xf00ff00ff00ff00f) | ((z & 0x00f000f000f000f0) << 4) | ((z & 0x0f000f000f000f00) >> 4);
+        z = (z & 0xc3c3c3c3c3c3c3c3) | ((z & 0x0c0c0c0c0c0c0c0c) << 2) | ((z & 0x3030303030303030) >> 2);
+        z = (z & 0x9999999999999999) | ((z & 0x2222222222222222) << 1) | ((z & 0x4444444444444444) >> 1);
+        MortonPoint(z)
+    }
 }
 
-impl Grid {
+pub struct Universe {
+    life: FnvHashSet<MortonPoint>,
+    might_change: FnvHashSet<MortonPoint>,
+}
 
-    pub fn new() -> Grid {
-        let cells = FnvHashSet::default();
-        let active_cells = FnvHashSet::default();
+impl Universe {
 
-        Grid {
-            cells,
-            active_cells
+    pub fn new() -> Universe {
+        Universe {
+            life: FnvHashSet::default(),
+            might_change: FnvHashSet::default(),
         }
     }
 
+    pub fn step(&mut self) {
+
+        for point in might_change {
+            let count = self.count_neighbors(point);
+        }
+    }
+}
+*/
+pub struct Grid {
+    cells: FnvHashSet<(u32, u32)>,
+    active_cells: FnvHashSet<(u32, u32)>
+}
+
+impl Grid {
+    pub fn new() -> Grid {
+        Grid {
+            cells: FnvHashSet::default(),
+            active_cells: FnvHashSet::default(),
+        }
+    }
     pub fn randomize_region(&mut self, x_start: u32, y_start: u32, x_end: u32, y_end: u32) {
         let mut row = x_start;
 
@@ -145,6 +178,7 @@ impl Grid {
     }
 }
 
+
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
     node_ref: NodeRef,
@@ -153,6 +187,7 @@ pub struct App {
     timer: Box<dyn Task>,
     active: bool,
     grid: Grid,
+    last_rendered_cells: FnvHashSet<(u32, u32)>,
     height: u32,
     width: u32,
     console: ConsoleService,
@@ -205,6 +240,7 @@ impl Component for App {
             timer: Box::new(handle),
             active: false,
             grid: Grid::new(),
+            last_rendered_cells: FnvHashSet::default(),
             height,
             width,
             console: ConsoleService::new(),
@@ -353,6 +389,8 @@ impl Component for App {
                     self.move_start_y = event.client_y();
                     self.console.log(&format!("starting cell x: {} current cell x: {} starting cell y: {} current cell y: {}", starting_cell_x, current_cell_x, starting_cell_y, current_cell_y));
                     self.console.log(&format!("cell offset x: {} cell offset y: {}", self.cell_offset_x, self.cell_offset_y));
+                    self.last_rendered_cells = FnvHashSet::default();
+                    self.resize();
                     self.draw_cells();
                     self.has_moved = true;
                 }
@@ -410,6 +448,17 @@ impl Component for App {
 
 impl App {
 
+    fn cell_in_canvas(&self, ctx: &CanvasRenderingContext2d, row: u32, col: u32) -> bool {
+        let (adj_row, adj_col) = self.adjust_coords(row, col);
+        let y_pt = adj_row as f64 * self.cell_size as f64;
+        let x_pt = adj_col as f64 * self.cell_size as f64;
+        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
+        let canvas_width = canvas.width() as f64;
+        let canvas_height = canvas.height() as f64;
+
+        x_pt <= canvas_height && y_pt <= canvas_width
+    }
+
     fn randomize_region(&mut self) {
         let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
         let canvas_width = canvas.width() as f64;
@@ -461,6 +510,16 @@ impl App {
         self.grid.toggle_cell(row, col);
     }
 
+    fn draw_cell(&self, ctx: &CanvasRenderingContext2d, row: u32, col: u32) {
+        let (adj_row, adj_col) = self.adjust_coords(row, col);
+
+        ctx.rect(
+            adj_col as f64 * (self.cell_size as f64) ,
+            adj_row as f64 * (self.cell_size as f64),
+            self.cell_size as f64,
+            self.cell_size as f64);
+    }
+
     fn draw_cells(&mut self) {
 
         let ctx = self.canvas.as_ref()
@@ -473,25 +532,36 @@ impl App {
                 
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str(DEAD_COLOR));
-        ctx.fill_rect(0_f64, 0_f64, (self.width * CANVAS_MULTIPLIER) as f64, (self.height * CANVAS_MULTIPLIER) as f64);
-        
-        ctx.begin_path();
-        ctx.set_fill_style(&JsValue::from_str(ALIVE_COLOR));
 
-        for unadjusted_row in 0..self.width {
-            for unadjusted_col in 0..self.height {
-                let (row_idx, col_idx) = self.adjust_coords(unadjusted_row, unadjusted_col);
-                let cell_alive = self.grid.cell_alive(row_idx, col_idx);                
+        let canvas = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
+        let canvas_width = canvas.width() as f64;
+        let canvas_height = canvas.height() as f64;
+        ctx.fill_rect(0_f64, 0_f64, canvas_width, canvas_height);
+        self.console.log("whitespace");
 
-                if cell_alive {
-                    ctx.rect(unadjusted_col as f64 * (self.cell_size as f64) ,
-                    unadjusted_row as f64* (self.cell_size as f64),
-                    self.cell_size as f64,
-                    self.cell_size as f64);
-                }
+        let newly_dead: FnvHashSet<_> = self.last_rendered_cells.difference(&self.grid.cells).cloned().collect();
+        let newly_alive: FnvHashSet<_> = self.grid.cells.difference(&self.last_rendered_cells).cloned().collect();
+
+        for (row, col) in newly_dead {
+
+            if self.cell_in_canvas(&ctx, row, col) {
+                self.draw_cell(&ctx, row, col);
+                self.last_rendered_cells.remove(&(row, col));
             }
         }
         ctx.fill();
+
+        ctx.begin_path();
+        ctx.set_fill_style(&JsValue::from_str(ALIVE_COLOR));
+    
+        for (row, col) in newly_alive {
+            if self.cell_in_canvas(&ctx, row, col) {
+                self.draw_cell(&ctx, row, col);
+                self.last_rendered_cells.insert((row, col));
+            }
+        }
+        ctx.fill();
+
         let render_frame = self.link.callback(|_| Msg::Noop);
         let handle = RenderService::new().request_animation_frame(render_frame);
         self.render_loop = Some(Box::new(handle));
