@@ -266,14 +266,18 @@ mod test {
 
     }
 
-    /*#[test]
+    #[test]
     fn test_new_block_forward() {
         let top_left = PackedCells{top: 0b1111, bottom: 0b11110000};
-        let bottom_left = PackedCells{top: 0b10, bottom: }
-        let top_right = PackedCells(0b10 << 30);
-        let bottom_right = PackedCells(0b01 << 30);
+        let bottom_left = PackedCells{top: 0b10, bottom: 0};
+        let top_right = PackedCells{top:0b10, bottom: 0};
+        let bottom_right = PackedCells{top: 0b01 << 30, bottom: 0};
 
-        let expected = Block(0b111110, 0b100, 0b1111000001, 0);
+        let expected_r1 = Block::concat_rows(true, top_left.top, top_right.top);
+        let expected_r2 = Block::concat_rows(true, top_left.bottom, top_right.bottom);
+        let expected_r3 = Block::concat_rows(true, bottom_left.top, bottom_right.top);
+        let expected_r4 = Block::concat_rows(true, bottom_left.bottom, bottom_right.bottom);
+        let expected = Block(expected_r1, expected_r2, expected_r3, expected_r4);
         assert_eq!(expected, Block::new(true, top_left, bottom_left, top_right, bottom_right));
-    }*/
+    }
 }
