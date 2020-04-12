@@ -8,17 +8,28 @@ use fnv::FnvHashMap;
 use std::time::Duration;
 use std::collections::hash_map::Iter;
 
+// A coordinate system for the Packed Cells.
+// 1 point here represents 64 cells
+// u32 in two dimensions is basically an infinite universe
+// Smallest dimension is ~2 billion in size
+// It wraps at 0, u32::max_value() + 1 so there are no weird edge effects
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct PackedCoordinates(u16, u16);
-pub struct PackedCells{
+pub struct PackedCoordinates(u32, u32);
+
+
+pub struct PackedCells {
     top: u32,
     bottom: u32,
 }
 
 #[derive(PartialEq, Eq)]
 pub struct BlockRow(u64);
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Block(BlockRow, BlockRow, BlockRow, BlockRow);
+
+pub struct StepTable(Box<[u8]>);
+
 pub struct PackedCellMap(FnvHashMap<PackedCoordinates, PackedCells>);
 
 impl std::fmt::Debug for BlockRow {
@@ -29,11 +40,11 @@ impl std::fmt::Debug for BlockRow {
 }
 impl PackedCoordinates {
 
-    pub fn get_x(&self) -> u16 {
+    pub fn get_x(&self) -> u32 {
         self.0
     }
 
-    pub fn get_y(&self) -> u16 {
+    pub fn get_y(&self) -> u32 {
         self.1
     }
 }
@@ -63,6 +74,17 @@ impl Block {
         } else {
             BlockRow(((left & (0b11 << 30)) >> 30) | (right << 2))
         }
+    }
+
+    pub fn step(&self, step_table: &StepTable) -> PackedCells {
+        PackedCells{top: 0, bottom: 0}
+    }
+}
+
+impl StepTable {
+
+    pub fn new(b: Vec<u8>, s: Vec<u8>) -> StepTable {
+        StepTable(Vec::new().into_boxed_slice())
     }
 }
 
@@ -146,10 +168,10 @@ impl Component for App {
         canvas.set_width(200);
         canvas.set_height(200);
 
-        let start = PackedCoordinates(0_u16, 0_u16);
+        let start = PackedCoordinates(0_u32, 0_u32);
         let cells = PackedCells{top:0b11101101101011111, bottom: 0};
         self.universe.add(start, cells);
-        self.universe.add(PackedCoordinates(0_u16, 3_u16), PackedCells{top:!0b11101101101011111, bottom: 0});
+        self.universe.add(PackedCoordinates(0_u32, 3_u32), PackedCells{top:!0b11101101101011111, bottom: 0});
 
         self.canvas = Some(canvas);
         let render_frame = self.link.callback(|_| Msg::Draw);
