@@ -8,6 +8,10 @@ use fnv::FnvHashMap;
 use std::time::Duration;
 use std::collections::hash_map::Iter;
 
+extern crate js_sys;
+
+const RANDOM_ALIVE: f64 = 0.2;
+
 /* A coordinate system for the Packed Cells.
  1 point here represents 64 cells
  u32 in two dimensions is basically an infinite universe
@@ -56,17 +60,18 @@ impl PackedCells {
             result |= (transitions.tf(region) as u64) << offset;
         }
         
-        let rightmost = (top.0 >> 63) | ((upper_right.0 & 0b11) << 1) // top 1x3 row
-            | ((self.0 >> 63) << 3) | ((right.0 & 0b11) << 4) // middle 1x3 row
-            | ((bottom.0 >> 63) << 6) | ((bottom_right.0 & 0b11) << 7); // bottom 1x3 row
-        result |= (transitions.tf(rightmost) as u64) << 62;
 
         let second_rightmost = (top.0 >> 62) | ((upper_right.0 & 0b1) << 2)
             | ((self.0 >> 62) << 3) | ((right.0 & 0b1) << 5)
             | ((bottom.0 >> 62) << 6) | ((bottom_right.0 & 0b1) << 8);
         
-        result |= (transitions.tf(second_rightmost) as u64) << 63;
-        
+        result |= (transitions.tf(second_rightmost) as u64) << 62;
+
+        let rightmost = (top.0 >> 63) | ((upper_right.0 & 0b11) << 1) // top 1x3 row
+        | ((self.0 >> 63) << 3) | ((right.0 & 0b11) << 4) // middle 1x3 row
+        | ((bottom.0 >> 63) << 6) | ((bottom_right.0 & 0b11) << 7); // bottom 1x3 row
+        result |= (transitions.tf(rightmost) as u64) << 63;
+
         PackedCells(result)
     }
 
@@ -89,7 +94,7 @@ impl PackedCells {
 
         let second_leftmost = ((upper_left.0 & (0b1 << 63)) >> 63) | ((top.0 & 0b11) << 1)
             | ((left.0 & (0b1 << 63)) >> 60) | ((self.0 & 0b11) << 4)
-            | ((bottom_left.0 & (0b1 << 63) >> 57)) | ((bottom.0 & 0b11) << 7);
+            | (((bottom_left.0 & (0b1 << 63)) >> 57)) | ((bottom.0 & 0b11) << 7);
 
         new_cells |= (transitions.tf(second_leftmost) as u64) << 1;
 
@@ -99,7 +104,11 @@ impl PackedCells {
             | (((bottom.0 & (0b111 << offset)) >> offset) << 6); // bottom 1x3 row
 
             new_cells |= (transitions.tf(region) as u64) << offset << 2;
-        }
+        }        
+        /*if self.0 == 0b10 {
+            println!("stagger left: {:b} {:b} left: {:b} 2ndleft: {:b}", self.0, new_cells, leftmost, second_leftmost);
+            println!("stagger left: ul {:b} l: {:b} bl: {:b} t: {:b} s: {:b} b: {:b}", upper_left.0, left.0, bottom_left.0, top.0, self.0, bottom.0)
+        }*/
         PackedCells(new_cells)
     }
 }
@@ -211,39 +220,65 @@ impl Universe {
         }
     }
 
+    pub fn randomize(&mut self, x_start: u32, y_start: u32, x_end: u32, y_end: u32) {
+        for x in x_start..=x_end {
+
+            //ConsoleService::new().log(&format!("got x {} ", x));
+            for y in y_start..=y_end {
+
+                let mut num = 0_u64;
+                for shift in 0..=63 {
+                    if js_sys::Math::random() < RANDOM_ALIVE {
+                        num |= 0b1 << shift;
+                    }
+                }
+                self.add(PackedCoordinates(x, y), PackedCells(num));
+                //ConsoleService::new().log(&format!("got cells {:?}  {:?}", PackedCells(num), PackedCoordinates(x, y)));
+            }
+        }
+    }
+
     pub fn step(&mut self) {
-        /*let mut next_gen = PackedCellMap(FnvHashMap::default());
+        let mut next_gen = PackedCellMap(FnvHashMap::default());
         for (&coordinates, &cells) in self.get_packed_cells() {
-            let new_cells = self.new_cells(coordinates, cells);
-            next_gen.0.insert(coordinates, new_cells);
-            Universe::activate_neighbors(&mut next_gen, coordinates);
-            ConsoleService::new().log(&format!("got cells {:?} {:?} ", new_cells, cells));
+            let (new_cells, empty) = self.new_cells(coordinates, cells);
+            if !empty {
+                next_gen.0.insert(coordinates, new_cells);
+                Universe::activate_neighbors(&mut next_gen, coordinates);
+
+            }
+            //if new_cells.0 != 0 {
+            //}
+            ////ConsoleService::new().log(&format!("got cells {:?} {:?} ", new_cells, cells));
         }
 
-        ConsoleService::new().log(&format!("cells {:?}", self.cells.0));
-        ConsoleService::new().log(&format!("s cells{:?}", self.staggered_cells.0));
+        ////ConsoleService::new().log(&format!("cells {:?}", self.cells.0));
+        ////ConsoleService::new().log(&format!("s cells{:?}", self.staggered_cells.0));
 
-        ConsoleService::new().log(&format!("nextgen {:?}", next_gen.0));
+        //ConsoleService::new().log(&format!("nextgen {:?}", next_gen.0));
         if self.staggerred_right {
             self.cells = next_gen;
         } else {
             self.staggered_cells = next_gen;
         }
         self.staggerred_right = !self.staggerred_right;
-        ConsoleService::new().log(&format!("s{:?}", self.staggerred_right));*/
+        ////ConsoleService::new().log(&format!("s{:?}", self.staggerred_right));
 
     }
 
-    pub fn new_cells(&self, coordinates: PackedCoordinates, cells: PackedCells) -> PackedCells {
-        /*if self.staggerred_right {
+    pub fn new_cells(&self, coordinates: PackedCoordinates, cells: PackedCells) -> (PackedCells, bool) {
+        if self.staggerred_right {
             let r1 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 1))).cloned().unwrap_or(PackedCells::default());
             let r2 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
             let r3 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 0) + PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
             let r4 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
             let r5 = cells;
             let r6 = self.staggered_cells.0.get(&(coordinates + PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
-            ConsoleService::new().log(&format!("staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
-            self.step_table.step(self.staggerred_right, r1, r2, r3, r4, r5, r6)
+            if r1.0 == 0 && r2.0 == 0 && r3.0 == 0 && r4.0 == 0 && r5.0 == 0 && r6.0 == 0 {
+                return (PackedCells::default(), true)
+            }
+            ////ConsoleService::new().log(&format!("staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
+            (r5.stagger_left(&self.transitions, r1, r2, r3, r4, r6), false)
         } else {
             let r1 = self.cells.0.get(&(coordinates - PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
             let r2 = cells;
@@ -251,11 +286,13 @@ impl Universe {
             let r4 = self.cells.0.get(&(coordinates - PackedCoordinates(0, 1) + PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
             let r5 = self.cells.0.get(&(coordinates + PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
             let r6 = self.cells.0.get(&(coordinates + PackedCoordinates(1, 1))).cloned().unwrap_or(PackedCells::default());
-            ConsoleService::new().log(&format!("not staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
-
-            self.step_table.step(self.staggerred_right, r1, r2, r3, r4, r5, r6)
-        }*/
-        PackedCells::default()
+            ////ConsoleService::new().log(&format!("not staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
+            if r1.0 == 0 && r2.0 == 0 && r3.0 == 0 && r4.0 == 0 && r5.0 == 0 && r6.0 == 0 {
+                return (PackedCells::default(), true)
+            }
+            (r2.stagger_right(&self.transitions, r1, r3, r4, r5, r6), false)
+        }
+        
     }
 
     pub fn add(&mut self, coordinates: PackedCoordinates, cells: PackedCells) {
@@ -322,7 +359,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(5000), link.callback(|_| Msg::Tick));
+        let handle = interval.spawn(Duration::from_millis(2000), link.callback(|_| Msg::Tick));
 
         App {
             canvas: None,
@@ -341,8 +378,8 @@ impl Component for App {
 
         let canvas: HtmlCanvasElement = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
 
-        canvas.set_width(1000);
-        canvas.set_height(1000);
+        canvas.set_width(6000);
+        canvas.set_height(6000);
 
         /*let start = PackedCoordinates(1_u32, 10_u32);
         let cells = PackedCells(0b1);
@@ -353,7 +390,7 @@ impl Component for App {
         let start = PackedCoordinates(1_u32, 12_u32);
         let cells = PackedCells(0b1);
         self.universe.add(start, cells);*/
-        let start = PackedCoordinates(1_u32, 20_u32);
+        /*let start = PackedCoordinates(1_u32, 20_u32);
         let cells = PackedCells(0b011);
         self.universe.add(start, cells);
         let start = PackedCoordinates(1_u32, 21_u32);
@@ -368,9 +405,30 @@ impl Component for App {
         let start = PackedCoordinates(0_u32, 20_u32);
         let cells = PackedCells(0b111 << 63);
         self.universe.add(start, cells);
-        let start = PackedCoordinates(0_u32, 21_u32);
-        let cells = PackedCells(0b111);
+        let start = PackedCoordinates(2_u32, 21_u32);
+        let cells = PackedCells(0b010_000_1);
         self.universe.add(start, cells);
+        let start = PackedCoordinates(2_u32, 22_u32);
+        let cells = PackedCells(0b101_000_1);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(2_u32, 23_u32);
+        let cells = PackedCells(0b10_000_1);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 21_u32);
+        let cells = PackedCells(0b111_0_111);
+        self.universe.add(start, cells);*/
+
+        //self.universe.randomize(0, 0, 20, 1000);
+        let start = PackedCoordinates(1_u32, 5_u32);
+        let cells = PackedCells(0b0100000000000000000000000000000000000000000000000000000000000000);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 6_u32);
+        let cells = PackedCells(0b1000000000000000000000000000000000000000000000000000000000000000);
+        self.universe.add(start, cells);
+        let start = PackedCoordinates(1_u32, 7_u32);
+        let cells = PackedCells(0b1110000000000000000000000000000000000000000000000000000000000000);
+        self.universe.add(start, cells);
+
         self.canvas = Some(canvas);
         let render_frame = self.link.callback(|_| Msg::Draw);
         let handle = RenderService::new().request_animation_frame(render_frame);
@@ -421,15 +479,12 @@ impl App {
             .dyn_into::<CanvasRenderingContext2d>()
             .unwrap();
 
-        let cell_size = 3;
+        let cell_size = 10;
 
         ctx.begin_path();
-        if self.universe.staggerred_right {
-            ctx.set_fill_style(&JsValue::from_str("blue"));
-        }
         ctx.set_fill_style(&JsValue::from_str("white"));
 
-        ctx.fill_rect(0_f64, 0_f64, 2000_f64, 2000_f64);
+        ctx.fill_rect(0_f64, 0_f64, 6000_f64, 6000_f64);
 
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str("red"));
@@ -547,38 +602,24 @@ mod test {
         let actual = cells.stagger_left(&transitions, default, default, default, default, default);
         assert_eq!(expected, actual);
     }
- /*
+
     #[test]
     fn test_step() {
-        let r1 = PackedCells(0b1);
-        let r4 = PackedCells(0); 
-        let lookup = StepTable::new(vec![3], vec![2]);
-        let expected = PackedCells(0b1);
-
-        assert_eq!(expected, lookup.step(true, r1, r1, r1, r4, r4, r4));
-
-        let expected = PackedCells(0xc000000000000000);
-        assert_eq!(expected, lookup.step(true, r4, r4, r4, r1, r1, r1));
-
-        let r1 = PackedCells(0x8000000000000000);
-        let expected = PackedCells(0b11);
-        assert_eq!(expected, lookup.step(false, r1, r1, r1, r4, r4, r4));
-
-        let expected = PackedCells(0);
-        assert_eq!(expected, lookup.step(false, r4, r4, r4, r1, r1, r1));
-    }
-   
-
-    #[test]
-    fn test_new_cells() {
         let mut universe = Universe::new();
-        universe.add(PackedCoordinates(1, 1), PackedCells(0b111));
-        universe.step();
-        let expected = Some(&PackedCells(0b1));
-        println!("{:?}", universe.cells.0);
-        println!("{:?}", universe.staggered_cells.0);
-        assert_eq!(expected, universe.staggered_cells.0.get(&PackedCoordinates(1, 1)));
-        assert_eq!(expected,universe.staggered_cells.0.get(&PackedCoordinates(1, 2)));
-        assert_eq!(expected,universe.staggered_cells.0.get(&PackedCoordinates(1, 0)));
-    }*/
+
+        // what happens to a glider?
+        universe.add(PackedCoordinates(0, 0), PackedCells(0b010));
+        universe.add(PackedCoordinates(0, 1), PackedCells(0b001));
+        universe.add(PackedCoordinates(0, 2), PackedCells(0b111));
+
+        for i in 0..1000 {
+            universe.step();
+            println!("{:?}", i);
+            println!("cells {:?}", universe.cells.0);
+            println!("staggered {:?}", universe.staggered_cells.0);
+            assert_eq!(universe.cells.0.values().map(|i| i.0.count_ones()).sum::<u32>(), 5);
+            assert_eq!(universe.staggered_cells.0.values().map(|i| i.0.count_ones()).sum::<u32>(), 5);
+
+        }
+    }
 }
