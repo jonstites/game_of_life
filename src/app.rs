@@ -35,6 +35,74 @@ impl std::fmt::Display for PackedCells {
     }
 }
 
+impl PackedCells {
+
+    pub fn stagger_right(
+        &self,
+        transitions: &Transitions,
+        top: PackedCells,
+        bottom: PackedCells,
+        upper_right: PackedCells,
+        right: PackedCells,
+        bottom_right: PackedCells,
+    ) -> PackedCells {
+
+        let mut result = 0_u64;
+
+        for offset in 0..=61 {
+            let region = ((top.0 & (0b111 << offset)) >> offset) // top 1x3 row
+                | ((self.0 & (0b111 << offset)) >> offset << 3) // middle 1x3 row
+                | ((bottom.0 & (0b111 << offset)) >> offset << 6); // bottom 1x3 row
+            result |= (transitions.tf(region) as u64) << offset;
+        }
+        
+        let rightmost = (top.0 >> 63) | ((upper_right.0 & 0b11) << 1) // top 1x3 row
+            | ((self.0 >> 63) << 3) | ((right.0 & 0b11) << 4) // middle 1x3 row
+            | ((bottom.0 >> 63) << 6) | ((bottom_right.0 & 0b11) << 7); // bottom 1x3 row
+        result |= (transitions.tf(rightmost) as u64) << 62;
+
+        let second_rightmost = (top.0 >> 62) | ((upper_right.0 & 0b1) << 2)
+            | ((self.0 >> 62) << 3) | ((right.0 & 0b1) << 5)
+            | ((bottom.0 >> 62) << 6) | ((bottom_right.0 & 0b1) << 8);
+        
+        result |= (transitions.tf(second_rightmost) as u64) << 63;
+        
+        PackedCells(result)
+    }
+
+    pub fn stagger_left(
+        &self,
+        transitions: &Transitions,
+        upper_left: PackedCells,
+        left: PackedCells,
+        bottom_left: PackedCells,
+        top: PackedCells,
+        bottom: PackedCells,
+    ) -> PackedCells {
+
+        let mut new_cells = 0_u64;
+
+        let leftmost = ((upper_left.0 & (0b01 << 62)) >> 62) | ((upper_left.0 >> 63) << 1) | ((top.0 & 0b1) << 2)
+            | ((left.0 & (0b01 << 62)) >> 59) | ((left.0 >> 63) << 4) | ((self.0 & 0b1) << 5)
+            | ((bottom_left.0 & (0b01 << 62)) >> 56) | ((bottom_left.0 >> 63) << 7) | ((bottom.0 & 0b1) << 8);
+        new_cells |= transitions.tf(leftmost) as u64;
+
+        let second_leftmost = ((upper_left.0 & (0b1 << 63)) >> 63) | ((top.0 & 0b11) << 1)
+            | ((left.0 & (0b1 << 63)) >> 60) | ((self.0 & 0b11) << 4)
+            | ((bottom_left.0 & (0b1 << 63) >> 57)) | ((bottom.0 & 0b11) << 7);
+
+        new_cells |= (transitions.tf(second_leftmost) as u64) << 1;
+
+        for offset in 0..=61 {
+            let region = ((top.0 & (0b111 << offset)) >> offset) // top 1x3 row
+            | (((self.0 & (0b111 << offset)) >> offset) << 3) // middle 1x3 row
+            | (((bottom.0 & (0b111 << offset)) >> offset) << 6); // bottom 1x3 row
+
+            new_cells |= (transitions.tf(region) as u64) << offset << 2;
+        }
+        PackedCells(new_cells)
+    }
+}
 /*
 Lookup from a 3x3 region to a 1x1 region (1 bit)
 
@@ -50,7 +118,7 @@ Bits are arranged as:
 4 5 6
 7 8 9
 */
-pub struct StepTable(Box<[u8]>);
+pub struct Transitions(Box<[u8]>);
 
 pub struct PackedCellMap(FnvHashMap<PackedCoordinates, PackedCells>);
 
@@ -81,13 +149,19 @@ impl PackedCoordinates {
     }
 }
 
-impl StepTable {
+impl Transitions {
 
-    pub fn new(b: Vec<u32>, s: Vec<u32>) -> StepTable {
-        StepTable(StepTable::make_lookup(b, s))
+    pub fn new(b: Vec<u32>, s: Vec<u32>) -> Self {
+        let tf = Self::make_transition_function(b, s);
+        Self(tf)
     }
 
-    pub fn make_lookup(b: Vec<u32>, s: Vec<u32>) -> Box<[u8]> {
+    pub fn conway() -> Self {
+        let tf = Self::make_transition_function(vec!(3), vec!(2));
+        Self(tf)
+    }
+
+    pub fn make_transition_function(b: Vec<u32>, s: Vec<u32>) -> Box<[u8]> {
         let mut lookup = Vec::with_capacity(512);
 
         for idx in 0..512 {
@@ -99,68 +173,11 @@ impl StepTable {
             } else {
                 lookup.push(0_u8);
             }
-            println!("{:b}, {:b} {} {}", idx, target_cell_masked, alive, num_neighbors);
         }
         lookup.into_boxed_slice()
     }
 
-    pub fn step(
-        &self,
-        staggerred_right: bool, 
-        r1: PackedCells, r2: PackedCells,
-        r3: PackedCells, r4: PackedCells,
-        r5: PackedCells, r6: PackedCells
-    ) -> PackedCells {
-
-        if !staggerred_right {            
-            let mut new_cells = 0_u64;
-
-            for offset in 0..=61 {
-                let region = ((r1.0 & (0b111 << offset)) >> offset) // top 1x3 row
-                    | ((r2.0 & (0b111 << offset)) >> offset << 3) // middle 1x3 row
-                    | ((r3.0 & (0b111 << offset)) >> offset << 6); // bottom 1x3 row
-                new_cells |= (self.lookup(region) as u64) << offset;
-            }
-            
-            let rightmost = (r1.0 >> 63) | ((r4.0 & 0b11) << 1) // top 1x3 row
-                | ((r2.0 >> 63) << 3) | ((r5.0 & 0b11) << 4) // middle 1x3 row
-                | ((r3.0 >> 63) << 6) | ((r6.0 & 0b11) << 7); // bottom 1x3 row
-            new_cells |= (self.lookup(rightmost) as u64) << 62;
-
-            let second_rightmost = (r1.0 >> 62) | ((r4.0 & 0b1) << 2)
-                | ((r2.0 >> 62) << 3) | ((r5.0 & 0b1) << 5)
-                | ((r3.0 >> 62) << 6) | ((r6.0 & 0b1) << 8);
-            
-            new_cells |= (self.lookup(second_rightmost) as u64) << 63;
-            
-            PackedCells(new_cells)
-        } else {
-            let mut new_cells = 0_u64;
-
-            let leftmost = (r1.0 >> 62) | ((r4.0 & 0b1) << 2) 
-                | ((r2.0 >> 62) << 3) | ((r5.0 & 0b1) << 5)
-                | ((r3.0 >> 62) << 6) | ((r6.0 & 0b1) << 8);
-            new_cells |= self.lookup(leftmost) as u64;
-
-            let second_leftmost = (r1.0 >> 63) | ((r4.0 & 0b11) << 1)
-                | ((r2.0 >> 63) << 3) | ((r5.0 & 0b11) << 4)
-                | ((r3.0 >> 63) << 6) | ((r6.0 & 0b11) << 7);
-            new_cells |= (self.lookup(second_leftmost) as u64) << 1;
-            println!("r1: {:?} r2: {:?} r3: {:?} r4: {:?} r5: {:?} r6: {:?}", r1, r2, r3, r4, r5, r6);
-            println!("leftmost: {:b}", leftmost);
-            println!("second leftmost: {:b}", second_leftmost);
-            for offset in 0..=61 {
-                let region = (r4.0 & (0b111 << offset) >> offset) // top 1x3 row
-                | (r5.0 & (0b111 << offset) >> offset << 3) // middle 1x3 row
-                | (r6.0 & (0b111 << offset) >> offset << 6); // bottom 1x3 row
-                println!("offset: {} {:b}", offset, region);
-                new_cells |= (self.lookup(region) as u64) << offset << 2;
-            }
-            PackedCells(new_cells)
-        }        
-    }
-
-    pub fn lookup(&self, region: u64) -> u8 {
+    pub fn tf(&self, region: u64) -> u8 {
         self.0[region as usize]
     }
 }
@@ -181,7 +198,7 @@ pub struct Universe {
     cells: PackedCellMap,
     staggered_cells: PackedCellMap,
     staggerred_right: bool,
-    step_table: StepTable,
+    transitions: Transitions,
 }
 
 impl Universe {
@@ -190,12 +207,12 @@ impl Universe {
             cells: PackedCellMap(FnvHashMap::default()),
             staggered_cells: PackedCellMap(FnvHashMap::default()),
             staggerred_right: false,
-            step_table: StepTable::new(vec!(3), vec!(2)),
+            transitions: Transitions::conway(),
         }
     }
 
     pub fn step(&mut self) {
-        let mut next_gen = PackedCellMap(FnvHashMap::default());
+        /*let mut next_gen = PackedCellMap(FnvHashMap::default());
         for (&coordinates, &cells) in self.get_packed_cells() {
             let new_cells = self.new_cells(coordinates, cells);
             next_gen.0.insert(coordinates, new_cells);
@@ -213,12 +230,12 @@ impl Universe {
             self.staggered_cells = next_gen;
         }
         self.staggerred_right = !self.staggerred_right;
-        ConsoleService::new().log(&format!("s{:?}", self.staggerred_right));
+        ConsoleService::new().log(&format!("s{:?}", self.staggerred_right));*/
 
     }
 
     pub fn new_cells(&self, coordinates: PackedCoordinates, cells: PackedCells) -> PackedCells {
-        if self.staggerred_right {
+        /*if self.staggerred_right {
             let r1 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 1))).cloned().unwrap_or(PackedCells::default());
             let r2 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 0))).cloned().unwrap_or(PackedCells::default());
             let r3 = self.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 0) + PackedCoordinates(0, 1))).cloned().unwrap_or(PackedCells::default());
@@ -237,7 +254,8 @@ impl Universe {
             ConsoleService::new().log(&format!("not staggered r1 {:?} r2 {:?} r3 {:?} r4 {:?} r5 {:?} r6 {:?}", r1, r2, r3, r4, r5, r6));
 
             self.step_table.step(self.staggerred_right, r1, r2, r3, r4, r5, r6)
-        }
+        }*/
+        PackedCells::default()
     }
 
     pub fn add(&mut self, coordinates: PackedCoordinates, cells: PackedCells) {
@@ -454,14 +472,82 @@ mod test {
 
     #[test]
     fn test_lookup() {
-        let lookup = StepTable::new(vec![3], vec![2]);
+        let transitions = Transitions::conway();
 
-        assert_eq!(0b1, lookup.lookup(0b010_010_010));
-        assert_eq!(0b1, lookup.lookup(0b111_000_000));
-        assert_eq!(0b0, lookup.lookup(0b111_111_111));
-        assert_eq!(0b0, lookup.lookup(0b111_000_001));
+        assert_eq!(0b1, transitions.tf(0b010_010_010));
+        assert_eq!(0b1, transitions.tf(0b111_000_000));
+        assert_eq!(0b0, transitions.tf(0b111_111_111));
+        assert_eq!(0b0, transitions.tf(0b111_000_001));
     }
 
+    #[test]
+    fn test_stagger_right() {
+        let transitions = Transitions::conway();
+        let cells = PackedCells(0b101010101010101);
+        let default = PackedCells::default();
+
+        let expected = PackedCells(0);
+        let actual = cells.stagger_right(&transitions, default, default, default, default, default);
+        assert_eq!(expected, actual);
+
+        let cells = PackedCells(0b111);
+        let expected = PackedCells(0b1);
+        let actual = cells.stagger_right(&transitions, default, default, default, default, default);
+        assert_eq!(expected, actual);
+
+        let cells = PackedCells(0b111 << 61);
+        
+        let expected = PackedCells(0b001 << 61);
+        let actual = cells.stagger_right(&transitions, default, default, default, default, default);
+        assert_eq!(expected, actual);
+
+        let cells = default;
+        let upper_right = PackedCells(0b1);
+        let right = PackedCells(0b1);
+        let bottom_right = PackedCells(0b1);
+        
+        let expected = PackedCells(0b11 << 62);
+        let actual = cells.stagger_right(&transitions, default, default, upper_right, right, bottom_right);
+        assert_eq!(expected, actual);
+
+        let cells = PackedCells(0b10);
+        let top = PackedCells(0b10);
+        let bottom = PackedCells(0b10);
+
+        let expected = PackedCells(0b11);
+        let actual = cells.stagger_right(&transitions, top, bottom, default, default, default);
+        assert_eq!(expected, actual);        
+
+        let cells = PackedCells(0b100);
+        let top = PackedCells(0b100);
+        let bottom = PackedCells(0b100);
+
+        let expected = PackedCells(0b111);
+        let actual = cells.stagger_right(&transitions, top, bottom, default, default, default);
+        assert_eq!(expected, actual);      
+    }
+
+    #[test]
+    fn test_stagger_left() {
+        let transitions = Transitions::conway();
+        let cells = PackedCells(0b101010101010101);
+        let default = PackedCells::default();
+
+        let expected = PackedCells(0);
+        let actual = cells.stagger_left(&transitions, default, default, default, default, default);
+
+        let cells = PackedCells(0b111);
+        let expected = PackedCells(0b100);
+        let actual = cells.stagger_left(&transitions, default, default, default, default, default);
+        assert_eq!(expected, actual);
+
+        let cells = PackedCells(0b111 << 61);
+        
+        let expected = PackedCells(0b1 << 63);
+        let actual = cells.stagger_left(&transitions, default, default, default, default, default);
+        assert_eq!(expected, actual);
+    }
+ /*
     #[test]
     fn test_step() {
         let r1 = PackedCells(0b1);
@@ -481,7 +567,7 @@ mod test {
         let expected = PackedCells(0);
         assert_eq!(expected, lookup.step(false, r4, r4, r4, r1, r1, r1));
     }
-    /*
+   
 
     #[test]
     fn test_new_cells() {
