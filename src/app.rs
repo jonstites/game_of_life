@@ -10,6 +10,7 @@ use std::collections::hash_map::Iter;
 
 extern crate js_sys;
 
+
 const RANDOM_ALIVE: f64 = 0.2;
 
 /* A coordinate system for the Packed Cells.
@@ -359,7 +360,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(2000), link.callback(|_| Msg::Tick));
+        let handle = interval.spawn(Duration::from_millis(40), link.callback(|_| Msg::Tick));
 
         App {
             canvas: None,
@@ -378,8 +379,8 @@ impl Component for App {
 
         let canvas: HtmlCanvasElement = self.node_ref.cast::<HtmlCanvasElement>().unwrap();
 
-        canvas.set_width(6000);
-        canvas.set_height(6000);
+        canvas.set_width(5000);
+        canvas.set_height(5000);
 
         /*let start = PackedCoordinates(1_u32, 10_u32);
         let cells = PackedCells(0b1);
@@ -418,7 +419,7 @@ impl Component for App {
         let cells = PackedCells(0b111_0_111);
         self.universe.add(start, cells);*/
 
-        //self.universe.randomize(0, 0, 20, 1000);
+        self.universe.randomize(0, 0, 20, 1000);
         let start = PackedCoordinates(1_u32, 5_u32);
         let cells = PackedCells(0b0100000000000000000000000000000000000000000000000000000000000000);
         self.universe.add(start, cells);
@@ -446,7 +447,9 @@ impl Component for App {
                 false
             }
             Msg::Tick => {
-                self.universe.step();
+                for _i in 0..1 {
+                    self.universe.step();
+                }
                 self.draw_cells();
                 false
             },
@@ -479,12 +482,12 @@ impl App {
             .dyn_into::<CanvasRenderingContext2d>()
             .unwrap();
 
-        let cell_size = 10;
+        let cell_size = 5;
 
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str("white"));
 
-        ctx.fill_rect(0_f64, 0_f64, 6000_f64, 6000_f64);
+        ctx.fill_rect(0_f64, 0_f64, 5000_f64, 5000_f64);
 
         ctx.begin_path();
         ctx.set_fill_style(&JsValue::from_str("red"));
@@ -520,7 +523,7 @@ impl App {
     }
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod test {
 
     use super::*;
@@ -622,4 +625,167 @@ mod test {
 
         }
     }
-}
+
+    extern crate test;    
+    use test::{Bencher, black_box};
+
+    #[bench]
+    fn bench_stagger_left(b: &mut Bencher) {
+        let transitions = Transitions::conway();
+        let default = PackedCells::default();
+        let cells = PackedCells(0b111);
+
+        b.iter(|| {
+            // Inner closure, the actual test
+            for i in 1..100 {
+                cells.stagger_left(&transitions, default, default, default, default, default);
+            }
+        });
+    }
+
+    #[bench]
+    fn bench_hashmap(b: &mut Bencher) {
+        let coordinates = PackedCoordinates(30, 49);
+        let mut universe = Universe::new();
+        universe.add(PackedCoordinates(11, 12), PackedCells(0b11111));
+        b.iter(|| {
+            // Inner closure, the actual test
+            for i in 1..100 {
+                universe.staggered_cells.0.get(&(coordinates - PackedCoordinates(1, 1))).cloned().unwrap_or(PackedCells::default());
+            }
+        });
+    }
+
+    #[bench]
+    fn bench_tf(b: &mut Bencher) {
+        let transitions = Transitions::conway();
+
+        let region = 0b110101_u64;
+        b.iter(|| {
+            for i in 1..6400 {
+                transitions.tf(region);
+            }
+        });
+    }
+
+    #[bench]
+    fn bench_3x3_bits(b: &mut Bencher) {
+        let top = PackedCells(0b1111_0111_0000);
+        let middle = PackedCells(0b0000_1111_0010);
+        let bottom = PackedCells(0b0001_0111_1110);
+        let transitions = Transitions::conway();
+
+        b.iter(|| {
+            for i in 1..100 {
+                let mut new_cells = 0_u64;
+                for offset in 0..=61 {
+                    let region = ((top.0 & (0b111 << offset)) >> offset) // top 1x3 row
+                    | (((middle.0 & (0b111 << offset)) >> offset) << 3) // middle 1x3 row
+                    | (((bottom.0 & (0b111 << offset)) >> offset) << 6); // bottom 1x3 row
+        
+                    new_cells |= (transitions.tf(region) as u64) << offset << 2;
+                } 
+            }
+        })
+    }
+
+
+    #[bench]
+    fn bench_4x4_bits(b: &mut Bencher) {
+        let top = PackedCells(0b1111_0111_0000);
+        let middle = PackedCells(0b0000_1111_0010);
+        let middle2 = PackedCells(0b11);
+        let bottom = PackedCells(0b0001_0111_1110);
+        let transitions = vec![0b1111; 65512];
+        b.iter(|| {
+            for i in 1..100 {
+                let mut new_cells = 0_u64;
+                for offset in (0..=58).step_by(2) {
+                    let region = ((top.0 & (0b1111 << offset)) >> offset) // top 1x4 row
+                    | (((middle.0 & (0b1111 << offset)) >> offset) << 4) // middle 1x4 row
+                    | (((middle2.0 & (0b1111 << offset)) >> offset) << 8) // middle 1x4 row
+                    | (((bottom.0 & (0b1111 << offset)) >> offset) << 12); // bottom 1x4 row
+        
+                    new_cells |= (transitions[region as usize] as u64) << offset << 2;
+                } 
+            }
+        })
+    }
+
+    #[bench]
+    fn bench_4x4_512_bits(b: &mut Bencher) {
+        let top = PackedCells(0b1111_0111_0000);
+        let middle = PackedCells(0b0000_1111_0010);
+        let middle2 = PackedCells(0b11);
+        let bottom = PackedCells(0b0001_0111_1110);
+        let transitions = vec![0b1111; 65512];
+        b.iter(|| {
+            for i in 1..100 {
+                let mut new_cells = 0_u64;
+                for offset in (0..=58).step_by(2) {
+                    let region = ((top.0 & (0b1111 << offset)) >> offset) // top 1x4 row
+                    | (((middle.0 & (0b1111 << offset)) >> offset) << 4) // middle 1x4 row
+                    | (((middle2.0 & (0b1111 << offset)) >> offset) << 8) // middle 1x4 row
+                    | (((bottom.0 & (0b1111 << offset)) >> offset) << 12); // bottom 1x4 row
+        
+                    new_cells |= (transitions[region as usize] as u64) << offset << 2;
+                } 
+            }
+        })
+    }
+
+
+    #[bench]
+    fn bench_4x4_512_bits2(b: &mut Bencher) {
+        let zisdata: u32 = 0b1111_0111_0000;
+        let underdata: u32 = 0b0000_1111_0010;
+        let otherdata: u32 = ((zisdata << 2) & 0xcccccccc) + ((zisdata >> 2) & 0x33333333) ;
+        let otherunderdata: u32 = 0b0001_0111_1110;
+        let ruletable: Vec<u32> = vec![0b1111; 65512];
+        b.iter(|| {
+            for _i in 1..100 {
+                ruletable[(zisdata >> 16) as usize] << 26 +
+                          (ruletable[(underdata >> 16) as usize] << 18) +
+                          (ruletable[(zisdata & 0xffff) as usize] << 10) +
+                          (ruletable[(underdata & 0xffff) as usize] << 2) +
+                          (ruletable[(otherdata >> 16) as usize] << 24) +
+                          (ruletable[(otherunderdata >> 16) as usize] << 16) +
+                          (ruletable[(otherdata & 0xffff) as usize] << 8) +
+                           ruletable[(otherunderdata & 0xffff) as usize] ;
+
+            }
+        })
+    }
+
+    #[bench]
+    fn bench_4x4_512_64bits2(b: &mut Bencher) {
+        let zisdata: u64 = 0b1111_0111_0000;
+        let underdata: u64 = 0b0000_1111_0010;
+        let otherdata: u64 = ((zisdata << 2) & 0xcccccccc) + ((zisdata >> 2) & 0x33333333) ;
+        let otherunderdata: u64 = 0b0001_0111_1110;
+        let ruletable: Vec<u64> = vec![0b1111; 65512];
+        b.iter(|| {
+            for _i in 1..100 {
+                ruletable[(zisdata >> 16) as usize] << 26 +
+                          (ruletable[(underdata >> 16) as usize] << 18) +
+                          (ruletable[(zisdata & 0xffff) as usize] << 10) +
+                          (ruletable[(underdata & 0xffff) as usize] << 2) +
+                          (ruletable[(otherdata >> 16) as usize] << 24) +
+                          (ruletable[(otherunderdata >> 16) as usize] << 16) +
+                          (ruletable[(otherdata & 0xffff) as usize] << 8) +
+                           ruletable[(otherunderdata & 0xffff) as usize] +
+                           ruletable[(zisdata >> 48) as usize] << 48 +
+                          (ruletable[(underdata >> 48) as usize] << 40) +
+                          (ruletable[(zisdata & 0xffff) as usize] << 42) +
+                          (ruletable[(underdata & 0xffff) as usize] << 34) +
+                          (ruletable[(otherdata >> 48) as usize] << 56) +
+                          (ruletable[(otherunderdata >> 48) as usize] << 48) +
+                          (ruletable[(otherdata & 0xffff) as usize] << 40) +
+                           ruletable[(otherunderdata & 0xffff) as usize] << 32
+            
+                           ;
+
+            }
+        })
+    }
+}   */

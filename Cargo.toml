@@ -1,5 +1,5 @@
 [package]
-name = "game-of-life"
+name = "conk"
 version = "0.2.0"
 authors = ["Jonathan Stites <mail@jonstites.com>"]
 edition = "2018"
@@ -33,4 +33,7 @@ wasm-bindgen-test = "0.3.10"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
-opt-level = "s"
+opt-level = 3
+
+[profile.bench]
+opt-level = 3

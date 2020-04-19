@@ -1,6 +1,8 @@
 #![recursion_limit = "512"]
+#![feature(test)]
 
 mod app;
+mod life;
 mod utils;
 
 use wasm_bindgen::prelude::*;

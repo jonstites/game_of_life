@@ -1,0 +1,295 @@
+
+mod life {
+    use fnv::{FnvHashMap, FnvHashSet};
+    use std::ops::{Add, Sub};
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    struct Tile(u32);
+
+    // x grows to the right
+    // y grows down
+    #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+    struct TCoord(i32, i32);
+
+    type TMap = FnvHashMap<TCoord, Tile>;
+    type TSet = FnvHashSet<TCoord>;
+
+    struct RuleTable(Box<[u32]>);
+
+    struct Universe {
+        p01: TMap,
+        p10: TMap,
+        active: TSet,
+        generation: u32,
+        rule_table: RuleTable,
+        x: i32,
+        y: i32,
+    }
+
+    impl Add for TCoord {
+        type Output = Self;
+
+        fn add(self, other: Self) -> Self {
+            TCoord(self.0.wrapping_add(other.0), self.1.wrapping_add(other.1))
+        }
+    }
+
+    impl Sub for TCoord {
+        type Output = Self;
+
+        fn sub(self, other: Self) -> Self {
+            TCoord(self.0.wrapping_sub(other.0), self.1.wrapping_sub(other.1))
+        }
+    }
+
+    impl RuleTable {
+
+        fn new(b: Vec<u32>, s: Vec<u32>) -> RuleTable {
+            let mut table = vec![0; 65512];
+
+            for idx in 0..table.len() {
+                let i = idx as u32;
+                let lr_s = i & 0x777;
+                let lr_b = lr_s & !0x20;
+                let ll_s = i & 0xeee;
+                let ll_b = ll_s & !0x40;
+                let ur_s = i & 0x7770;
+                let ur_b = ur_s & !0x200;
+                let ul_s = i & 0xeee0;
+                let ul_b = ul_s & !0x400;
+                
+                let lr = if (((lr_s & 0x20) != 0) && s.contains(&lr_b.count_ones())) || b.contains(&lr_b.count_ones()) {
+                    1
+                } else {
+                    0
+                };
+
+                let ll = if (((ll_s & 0x40) != 0) && s.contains(&ll_b.count_ones())) || b.contains(&ll_b.count_ones()) {
+                    1
+                } else {
+                    0
+                };
+
+                let ur = if (((ur_s & 0x200) != 0) && s.contains(&ur_b.count_ones())) || b.contains(&ur_b.count_ones()) {
+                    1
+                } else {
+                    0
+                };
+
+                let ul = if (((ul_s & 0x400) != 0) && s.contains(&ul_b.count_ones())) || b.contains(&ul_b.count_ones()) {
+                    1
+                } else {
+                    0
+                };
+
+                let result: u32 = lr + (ll << 1) + (ur << 4) + (ul << 5);                
+                table[idx] = result;
+            }
+            RuleTable(table.into_boxed_slice())
+        }
+
+    }
+
+    impl Default for RuleTable {
+
+        fn default() -> RuleTable {
+            RuleTable::new(vec!(3), vec!(2, 3))
+        }
+    }
+
+    impl std::fmt::Debug for Tile {
+
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "{:b}", self.0)
+        }
+    }
+
+    impl Universe {
+
+        pub fn new(b: Vec<u32>, s: Vec<u32>) -> Universe {
+            let p01 = TMap::default();
+            let p10 = TMap::default();
+            let active = TSet::default();
+            let generation = 0;
+            let rule_table = RuleTable::new(b, s);
+            let x = 0;
+            let y = 0;
+
+            Universe {
+                p01, p10, active, generation, rule_table, x, y
+            }
+        }
+
+        pub fn step(&mut self) {
+
+            let is_even = self.generation % 2 == 0;
+            if is_even {
+                let (active, p01) = self.p01_step(&self.active, &self.p01);
+                self.active = active;
+                self.p01 = p01;
+            } else {
+                let (active, p10) = self.p10_step(&self.active, &self.p10);
+                self.active = active;
+                self.p10 = p10;
+            }
+
+            self.generation += 1;
+        }
+
+        fn p01_step(&self, active: &TSet, tiles: &TMap) -> (TSet, TMap) {
+            let mut next_active = TSet::default();
+            let mut next_gen = TMap::default();
+
+            for coord in active {
+                let right_coord = *coord + TCoord(1, 0);
+                let down_coord = *coord + TCoord(0, 1);
+                let downright_coord = *coord + TCoord(1, 1);
+
+                let tile = tiles.get(coord).cloned().unwrap_or(Tile(0));
+                let right = tiles.get(&right_coord).cloned().unwrap_or(Tile(0));
+                let down = tiles.get(&down_coord).cloned().unwrap_or(Tile(0));
+                let downright = tiles.get(&downright_coord).cloned().unwrap_or(Tile(0));
+
+                let new_tile = self.p01_calc(tile, right, down, downright);
+                next_gen.insert(*coord, new_tile);
+                if tile != new_tile {
+                    next_active.insert(*coord);
+                    next_active.insert(right_coord);
+                    next_active.insert(down_coord);
+                    next_active.insert(downright_coord);
+                }
+                
+            }
+            (next_active, next_gen)
+        }
+
+        fn p10_step(&self, active: &TSet, tiles: &TMap) -> (TSet, TMap) {
+            let mut next_active = TSet::default();
+            let mut next_gen = TMap::default();
+
+            for coord in active {
+                let left_coord = *coord - TCoord(1, 0);
+                let up_coord = *coord - TCoord(0, 1);
+                let upleft_coord = *coord - TCoord(1, 1);
+
+                let tile = tiles.get(coord).cloned().unwrap_or(Tile(0));
+                let left = tiles.get(&left_coord).cloned().unwrap_or(Tile(0));
+                let up = tiles.get(&up_coord).cloned().unwrap_or(Tile(0));
+                let upleft = tiles.get(&upleft_coord).cloned().unwrap_or(Tile(0));
+
+                let new_tile = self.p10_calc(tile, left, up, upleft);
+                next_gen.insert(*coord, new_tile);
+                if tile != new_tile {
+                    next_active.insert(*coord);
+                    next_active.insert(left_coord);
+                    next_active.insert(up_coord);
+                    next_active.insert(upleft_coord);
+                }
+                
+            }
+            (next_active, next_gen)
+        }
+
+        fn p01_calc(&self, tile: Tile, right: Tile, down: Tile, downright: Tile) -> Tile {
+
+            let center_data = tile.0;
+            let down_data = (center_data << 8) + (down.0 >> 24);
+            let right_data = ((center_data << 2) & 0xcccccccc) + ((right.0 >> 2) & 0x33333333);
+            let downright_data = ((down_data << 2) & 0xcccccccc) + ((((right.0 << 8) + (downright.0 >> 24)) >> 2) & 0x33333333);
+
+            Tile(
+                (self.rule_table.0[(center_data >> 16) as usize] << 26) +
+                (self.rule_table.0[(down_data >> 16) as usize] << 18) +
+                (self.rule_table.0[(center_data & 0xffff) as usize] << 10) +
+                (self.rule_table.0[(down_data & 0xffff) as usize] << 2) +
+                (self.rule_table.0[(right_data >> 16) as usize] << 24) +
+                (self.rule_table.0[(downright_data >> 16) as usize] << 16) +
+                (self.rule_table.0[(right_data & 0xffff) as usize] << 8) +
+                (self.rule_table.0[(downright_data & 0xffff) as usize])
+            )
+        }
+
+        fn p10_calc(&self, tile: Tile, left: Tile, up: Tile, upleft: Tile) -> Tile {
+
+            let center_data = tile.0;
+            let up_data = (center_data >> 8) + (up.0 << 24);
+            let left_data = ((center_data >> 2) & 0x33333333) + ((left.0 << 2) & 0xcccccccc) ;
+            let leftup_data = ((up_data >> 2) & 0x33333333) + ((((left.0 >> 8) + (upleft.0 << 24)) << 2) & 0xcccccccc);
+
+            Tile(
+                (self.rule_table.0[(leftup_data >> 16) as usize] << 26) +
+                (self.rule_table.0[(left_data >> 16) as usize] << 18) +
+                (self.rule_table.0[(leftup_data & 0xffff) as usize] << 10) +
+                (self.rule_table.0[(left_data & 0xffff) as usize] << 2) +
+                (self.rule_table.0[(up_data >> 16) as usize] << 24) +
+                (self.rule_table.0[(center_data >> 16) as usize] << 16) +
+                (self.rule_table.0[(up_data & 0xffff) as usize] << 8) +
+                (self.rule_table.0[(center_data & 0xffff) as usize])
+            )
+        }
+    }
+
+    impl Default for Universe {
+
+        fn default() -> Universe {
+            let b = vec!(3);
+            let s = vec!(2, 3);
+
+            Universe::new(b, s)
+        }
+    }
+
+
+    #[cfg(test)]
+    mod test {
+
+        use super::*;
+
+        #[test]
+        fn test_p01_calc() {
+            let universe = Universe::default();
+            let tile = Tile(0xc800_2220);
+            let right = Tile(0x8880_0008);
+            let down = Tile(0xd200_0000);
+            let downright = Tile(0x8000_0000);
+
+            let expected = Tile(0xb000_e2df);
+            let result = universe.p01_calc(tile, right, down, downright);
+
+            assert_eq!(expected, result);
+        }
+
+        #[test]
+        fn test_p10_calc() {
+            let universe = Universe::default();
+            let tile = Tile(0x0044_4013);
+            let left = Tile(0x3100_0013);
+            let up = Tile(0x18);
+            let upleft = Tile(0x81);
+
+            let expected = Tile(0xc0c47009);
+            let result = universe.p10_calc(tile, left, up, upleft);
+
+            assert_eq!(expected, result);
+        }    
+
+        extern crate test;    
+        use test::{Bencher, black_box};
+
+        #[bench]
+        fn bench_p01_calc(b: &mut Bencher) {
+            let universe = Universe::default();
+            let tile = Tile(0xc800_2220);
+            let right = Tile(0x8880_0008);
+            let down = Tile(0xd200_0000);
+            let downright = Tile(0x8000_0000);
+
+            b.iter(|| {
+                // Inner closure, the actual test
+                for _i in 1..100 {
+                    black_box(universe.p01_calc(tile, right, down, downright));
+                }
+            });
+        }
+    }
+}   
