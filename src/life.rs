@@ -3,13 +3,18 @@ mod life {
     use fnv::{FnvHashMap, FnvHashSet};
     use std::ops::{Add, Sub};
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum CellState {
+        Alive,
+        Dead,
+    }
     #[derive(Clone, Copy, PartialEq, Eq)]
     struct Tile(u32);
 
     // x grows to the right
     // y grows down
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-    struct TCoord(i32, i32);
+    struct TCoord(i64, i64);
 
     type TMap = FnvHashMap<TCoord, Tile>;
     type TSet = FnvHashSet<TCoord>;
@@ -20,10 +25,10 @@ mod life {
         p01: TMap,
         p10: TMap,
         active: TSet,
-        generation: u32,
+        generation: u64,
         rule_table: RuleTable,
-        x: i32,
-        y: i32,
+        x: i64,
+        y: i64,
     }
 
     impl Add for TCoord {
@@ -121,16 +126,15 @@ mod life {
         }
 
         pub fn step(&mut self) {
-
             let is_even = self.generation % 2 == 0;
             if is_even {
-                let (active, p01) = self.p01_step(&self.active, &self.p01);
-                self.active = active;
-                self.p01 = p01;
-            } else {
-                let (active, p10) = self.p10_step(&self.active, &self.p10);
+                let (active, p10) = self.p01_step(&self.active, &self.p01);
                 self.active = active;
                 self.p10 = p10;
+            } else {
+                let (active, p01) = self.p10_step(&self.active, &self.p10);
+                self.active = active;
+                self.p01 = p01;
             }
 
             self.generation += 1;
@@ -152,6 +156,7 @@ mod life {
 
                 let new_tile = self.p01_calc(tile, right, down, downright);
                 next_gen.insert(*coord, new_tile);
+
                 if tile != new_tile {
                     next_active.insert(*coord);
                     next_active.insert(right_coord);
@@ -227,6 +232,116 @@ mod life {
                 (self.rule_table.0[(center_data & 0xffff) as usize])
             )
         }
+
+        fn get_cell(&self, mut x: i64, mut y: i64) -> CellState {
+            // test both odd and even
+            // test (0, 0), (-1, 0), (-1,-1), (-1, 2)
+            // test 2^32, -2^32-1
+
+            if self.generation % 2 == 1 {
+                x -= 1;
+                y -= 1;
+            }
+
+            let coord_x = if x > 0 {
+                x / 4
+            } else {
+                (x / 4) + ((x % 4) - 3) / 4
+            };
+
+            let coord_y = if y > 0 {
+                y / 8
+            } else {
+                (y / 8) + ((y % 8) - 7) / 8
+            };
+
+            let coord = TCoord(coord_x, coord_y);
+            
+            let tile = if self.generation % 2 == 0 {
+                self.p01.get(&coord).cloned().unwrap_or(Tile(0))
+            } else {
+                self.p10.get(&coord).cloned().unwrap_or(Tile(0))
+            };
+
+
+            let t_x = if x >= 0 {
+                x % 4
+            } else {
+                ((x % 4) + 4) % 4
+            };
+
+            let t_y = if y >= 0 {
+                y % 8
+            } else {
+                ((y % 8) + 8) % 8
+            };
+
+            if tile.0 >> (31 - 4*t_y - t_x) & 1 != 0 {
+                CellState::Alive
+            } else {
+                CellState::Dead
+            }
+        }
+
+        fn set_cell(&mut self, mut x: i64, mut y: i64) {
+            // test both odd and even
+            // test (0, 0), (-1, 0), (-1,-1), (-1, 2)
+            // test 2^32, -2^32-1
+
+            if self.generation % 2 == 1 {
+                x -= 1;
+                y -= 1;
+            }
+
+            let coord_x = if x >= 0 {
+                x / 4
+            } else {
+                (x / 4) + ((x % 4) - 3) / 4
+            };
+
+            let coord_y = if y >= 0 {
+                y / 8
+            } else {
+                (y / 8) + ((y % 8) - 7) / 8
+            };
+
+            let coord = TCoord(coord_x, coord_y);
+            
+            let mut tile = if self.generation % 2 == 0 {
+                self.p01.get(&coord).cloned().unwrap_or(Tile(0))
+            } else {
+                self.p10.get(&coord).cloned().unwrap_or(Tile(0))
+            };
+
+
+            let t_x = if x >= 0 {
+                x % 4
+            } else {
+                ((x % 4) + 4) % 4
+            };
+
+            let t_y = if y >= 0 {
+                y % 8
+            } else {
+                ((y % 8) + 8) % 8
+            };
+            
+            tile.0 |= 1 << (31 - 4*t_y - t_x);
+
+            if self.generation % 2 == 0 {
+                self.p01.insert(coord, tile);
+                self.active.insert(coord);
+                self.active.insert(coord - TCoord(1, 1));
+                self.active.insert(coord - TCoord(1, 0));
+                self.active.insert(coord - TCoord(0, 1));
+            } else {
+                self.p10.insert(coord, tile);
+                self.active.insert(coord);
+                self.active.insert(coord + TCoord(1, 1));
+                self.active.insert(coord + TCoord(1, 0));
+                self.active.insert(coord + TCoord(0, 1));
+            }
+        }
     }
 
     impl Default for Universe {
@@ -271,7 +386,45 @@ mod life {
             let result = universe.p10_calc(tile, left, up, upleft);
 
             assert_eq!(expected, result);
-        }    
+        }
+
+        #[test]
+        fn test_step() {
+            let mut universe = Universe::default();
+            universe.set_cell(1, 1);
+            universe.set_cell(2, 1);
+            universe.set_cell(3, 1);
+            universe.step();
+
+            assert_eq!(CellState::Dead, universe.get_cell(1, 1));
+            assert_eq!(CellState::Alive, universe.get_cell(2, 1));
+            assert_eq!(CellState::Dead, universe.get_cell(3, 1));
+            assert_eq!(CellState::Alive, universe.get_cell(2, 2));
+            assert_eq!(CellState::Alive, universe.get_cell(2, 0));
+
+            universe.step();
+            assert_eq!(CellState::Alive, universe.get_cell(1, 1));
+            assert_eq!(CellState::Alive, universe.get_cell(2, 1));
+            assert_eq!(CellState::Alive, universe.get_cell(3, 1));
+
+        }
+
+        #[test]
+        fn test_many_steps() {
+            let mut universe = Universe::default();
+            universe.set_cell(0, 0);
+            universe.set_cell(1, 0);
+            universe.set_cell(2, 0);
+            universe.set_cell(2, -1);
+            universe.set_cell(1, -2);
+            
+            for _i in 0..1000 {
+                universe.step();
+            }
+
+            let expected = 5;
+            assert_eq!(expected, universe.p01.values().map(|v| v.0.count_ones()).sum::<u32>());
+        }
 
         extern crate test;    
         use test::{Bencher, black_box};
