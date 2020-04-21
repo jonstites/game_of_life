@@ -2,6 +2,7 @@
 mod life {
     use fnv::{FnvHashMap, FnvHashSet};
     use std::ops::{Add, Sub};
+    use web_sys::WebGlRenderingContext as GL;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum CellState {
@@ -342,6 +343,18 @@ mod life {
                 self.active.insert(coord + TCoord(0, 1));
             }
         }
+    
+        fn render(&mut self, g: GL) {
+            
+            unimplemented!("not implemented");
+        }
+
+        fn move_view(&mut self, x: i64, y: i64) {
+            self.x += x;
+            self.y += y;
+        }
+
+        // use include_str! for popular patterns
     }
 
     impl Default for Universe {

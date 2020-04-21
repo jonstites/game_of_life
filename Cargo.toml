@@ -19,7 +19,9 @@ web-sys = {version = "0.3.37", features = [
     'DomRect',
     'Element',
     'HtmlCanvasElement',
-    'HtmlElement'
+    'HtmlElement',
+    'WebGlBuffer', 'WebGlProgram', 'WebGlRenderingContext',
+    'WebGlShader', 'WebGlUniformLocation',
 ]}
 fnv = "1.0.6"
 # The `console_error_panic_hook` crate provides better debugging of panics by
