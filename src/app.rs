@@ -9,7 +9,6 @@ use std::time::Duration;
 
 extern crate js_sys;
 
-
 pub enum Msg {
     RenderGl,
     Noop, // eventually make this "step"
@@ -28,6 +27,8 @@ pub struct App {
     position_buffer: Option<WebGlBuffer>,
     resolution_uniform_location: Option<WebGlUniformLocation>,
     color_uniform_location: Option<WebGlUniformLocation>,
+    x: i32,
+    y: i32,
 }
 
 impl Component for App {
@@ -51,6 +52,8 @@ impl Component for App {
             position_buffer: None,
             resolution_uniform_location: None,
             color_uniform_location: None,
+            x: 0,
+            y: 0,
         }
     }
 
@@ -166,11 +169,10 @@ impl App {
     }
         
     pub fn render_gl(&mut self) {
-        //self.resize_gl();
         let gl = self.gl.as_ref().unwrap();
         let canvas = self.canvas.as_ref().unwrap();
-
-        /*
+        self.resize_gl();
+        
         gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
         
         gl.clear_color(0_f32, 0_f32, 0_f32, 0_f32);
@@ -194,87 +196,22 @@ impl App {
 
         // set the resolution
         gl.uniform2f(self.resolution_uniform_location.as_ref(), canvas.width() as f32, canvas.height() as f32);
+        // set the color
+        gl.uniform4f (self.color_uniform_location.as_ref(), js_sys::Math::random() as f32, js_sys::Math::random() as f32, js_sys::Math::random() as f32, 1.0);
 
-        let mut cells_to_draw = Vec::new();
-
-          // draw 50 random rectangles in random colors
-        for _ii in 0..=1 {
-            // Setup a random rectangle
-            // This will write to positionBuffer because
-            // its the last thing we bound on the ARRAY_BUFFER
-            // bind point
-            let x1 = 100_f32;
-            let x2 = 500_f32;
-            let y1 = 100_f32;
-            let y2 = 400_f32;
-            cells_to_draw.append(&mut vec!(
-                x1, y1,
-                x2, y1,
-                x1, y2,
-                x1, y2,
-                x2, y1,
-                x2, y2));
-        }
-        gl.uniform4f(self.color_uniform_location.as_ref(), 100_f32, 10_f32, 10_f32, 1_f32);
-        let vertices: Vec<f32> = vec![
-            -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0,
-        ];
+        let vertices: Vec<f32> = self.collect_cells();
         let verts = js_sys::Float32Array::from(vertices.as_slice());
         gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &verts, GL::STATIC_DRAW);
+
         // Draw the rectangle
         let primitive_type = GL::TRIANGLES;
         let offset = 0;
         let count = 6;
+
         gl.draw_arrays(primitive_type, offset, count as i32);
-        let render_frame = self.link.callback(|_| Msg::RenderGl);
-        let handle = RenderService::new().request_animation_frame(render_frame);
-
-        // A reference to the new handle must be retained for the next render to run.
-        self.render_loop = Some(Box::new(handle));*/
-        let gl = self.gl.as_ref().expect("GL Context not initialized!");
-
-        let vert_code = include_str!("./basic.vert");
-        let frag_code = include_str!("./basic.frag");
-
-        // This list of vertices will draw two triangles to cover the entire canvas.
-        let vertices: Vec<f32> = vec![
-            -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0,
-        ];
-        let vertex_buffer = gl.create_buffer().unwrap();
-        let verts = js_sys::Float32Array::from(vertices.as_slice());
-
-        gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vertex_buffer));
-        gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &verts, GL::STATIC_DRAW);
-
-        let vert_shader = gl.create_shader(GL::VERTEX_SHADER).unwrap();
-        gl.shader_source(&vert_shader, &vert_code);
-        gl.compile_shader(&vert_shader);
-
-        let frag_shader = gl.create_shader(GL::FRAGMENT_SHADER).unwrap();
-        gl.shader_source(&frag_shader, &frag_code);
-        gl.compile_shader(&frag_shader);
-
-        let shader_program = gl.create_program().unwrap();
-        gl.attach_shader(&shader_program, &vert_shader);
-        gl.attach_shader(&shader_program, &frag_shader);
-        gl.link_program(&shader_program);
-
-        gl.use_program(Some(&shader_program));
-
-        // Attach the position vector as an attribute for the GL context.
-        let position = gl.get_attrib_location(&shader_program, "a_position") as u32;
-        gl.vertex_attrib_pointer_with_i32(position, 2, GL::FLOAT, false, 0, 0);
-        gl.enable_vertex_attrib_array(position);
-
-        // Attach the time as a uniform for the GL context.
-        let time = gl.get_uniform_location(&shader_program, "u_time");
-        gl.uniform1f(time.as_ref(), 111 as f32);
-
-        gl.draw_arrays(GL::TRIANGLES, 0, 6);
 
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
-
         // A reference to the new handle must be retained for the next render to run.
         self.render_loop = Some(Box::new(handle));
     }
@@ -292,6 +229,13 @@ impl App {
             canvas.set_width(display_width);
             canvas.set_height(display_height);
         }
+    }
+
+    fn collect_cells(&self) -> Vec<f32> {
+        vec![
+            //-1.0, -1.0, 1.0, -1.0, -0.5, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0,
+            100.0, 100.0, 150.0, 100.0, 100.0, 200.0, 100.0, 200.0, 100.0, 100.0, 100.0, 200.0
+        ]
     }
 }
 
