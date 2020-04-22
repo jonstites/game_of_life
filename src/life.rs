@@ -1,8 +1,10 @@
 
-mod life {
+/*mod life {
     use fnv::{FnvHashMap, FnvHashSet};
     use std::ops::{Add, Sub};
-    use web_sys::WebGlRenderingContext as GL;
+    use web_sys::WebGl2RenderingContext as GL;
+    use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Element, WebGlBuffer, WebGlProgram, WebGlUniformLocation};
+    use yew::NodeRef;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum CellState {
@@ -344,9 +346,51 @@ mod life {
             }
         }
     
-        fn render(&mut self, g: GL) {
+        pub fn render(&self, gl: &mut GL, canvas: &mut HtmlCanvasElement, 
+            program: &WebGlProgram, position_attribute_location: u32, position_buffer: &WebGlBuffer, resolution_uniform_location: &WebGlUniformLocation) {
+            self.resize_gl(gl, canvas);
+            gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
             
-            unimplemented!("not implemented");
+            gl.clear_color(0_f32, 0_f32, 0_f32, 0_f32);
+            gl.clear(GL::COLOR_BUFFER_BIT);
+
+            gl.use_program(Some(program));
+
+              // Turn on the attribute
+            gl.enable_vertex_attrib_array(position_attribute_location);
+
+            // Bind the position buffer.
+            gl.bind_buffer(GL::ARRAY_BUFFER, Some(position_buffer));
+
+            // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
+            let size = 2;          // 2 components per iteration
+            let gl_type = GL::FLOAT;   // the data is 32bit floats
+            let normalize = false; // don't normalize the data
+            let stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+            let offset = 0;        // start at the beginning of the buffer
+            gl.vertex_attrib_pointer_with_i32(
+                position_attribute_location, size, gl_type, normalize, stride, offset);
+
+            // set the resolution
+            gl.uniform2f(Some(resolution_uniform_location), canvas.width() as f32, canvas.height() as f32);
+
+            // draw 50 random rectangles in random colors
+
+            //unimplemented!("not implemented");
+
+        }
+
+        fn resize_gl(&self, gl: &mut GL, canvas: &mut HtmlCanvasElement) {
+            // Lookup the size the browser is displaying the canvas.
+            let display_width = canvas.client_width() as u32;
+            let display_height = canvas.client_height() as u32;
+            
+            // Check if the canvas is not the same size.
+            if canvas.width() != display_width || canvas.height() != display_height {
+                // Make the canvas the same size
+                canvas.set_width(display_width);
+                canvas.set_height(display_height);
+            }
         }
 
         fn move_view(&mut self, x: i64, y: i64) {
@@ -458,4 +502,4 @@ mod life {
             });
         }
     }
-}   
+}   */
