@@ -2,7 +2,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGlBuffer, WebGlShader, WebGlProgram, WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
-use yew::services::{IntervalService, RenderService, Task};
+use yew::services::{IntervalService, RenderService, Task, ConsoleService};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
 
 use std::time::Duration;
@@ -12,6 +12,7 @@ extern crate js_sys;
 pub enum Msg {
     RenderGl,
     Noop, // eventually make this "step"
+    Step,
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -66,6 +67,11 @@ impl Component for App {
                 // the DOM like a framerate counter, or other overlaid textual elements.
                 self.render_gl();
             },
+            Msg::Step => {
+                self.universe.step();
+                //self.universe.step();
+                ConsoleService::new().log(&format!("cells: {:?}", self.universe.p01));
+            }
             _ => {
 
             }
@@ -92,6 +98,23 @@ impl Component for App {
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
 
+        self.universe.set_cell(0, 0);
+        self.universe.set_cell(1, 0);
+        self.universe.set_cell(2, 0);
+        self.universe.set_cell(2, -1);
+        self.universe.set_cell(1, -2);
+
+        self.universe.set_cell(4, 4);
+
+
+        for x in 0..1000 {
+            for y in 0..1000 {
+                if js_sys::Math::random() < 0.2 {
+                    self.universe.set_cell(x, y);
+                }
+            }
+        }
+
         // A reference to the handle must be stored, otherwise it is dropped and the render won't
         // occur.
         self.render_loop = Some(Box::new(handle));
@@ -104,6 +127,8 @@ impl Component for App {
         // TODO fix two body's
         html! {
                 <div>
+                
+                <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
                     <canvas ref={self.node_ref.clone()}>
                     { "This text is displayed if your browser does not support HTML5 Canvas." }
                     </canvas>
@@ -197,19 +222,19 @@ impl App {
         // set the resolution
         gl.uniform2f(self.resolution_uniform_location.as_ref(), canvas.width() as f32, canvas.height() as f32);
         // set the color
-        gl.uniform4f (self.color_uniform_location.as_ref(), js_sys::Math::random() as f32, js_sys::Math::random() as f32, js_sys::Math::random() as f32, 1.0);
+        gl.uniform4f (self.color_uniform_location.as_ref(), 1.0, 0.0, 0.0, 1.0);
 
-        let vertices: Vec<f32> = self.collect_cells();
+        let vertices: Vec<f32> = self.collect_cells(self.x, self.y, self.x + canvas.width() as i32, self.y + canvas.height() as i32);
         let verts = js_sys::Float32Array::from(vertices.as_slice());
         gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &verts, GL::STATIC_DRAW);
 
         // Draw the rectangle
         let primitive_type = GL::TRIANGLES;
         let offset = 0;
-        let count = 6;
+        let count = vertices.len() as i32 / 2;
 
         gl.draw_arrays(primitive_type, offset, count as i32);
-
+        self.universe.step();
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
         // A reference to the new handle must be retained for the next render to run.
@@ -231,11 +256,61 @@ impl App {
         }
     }
 
-    fn collect_cells(&self) -> Vec<f32> {
-        vec![
-            //-1.0, -1.0, 1.0, -1.0, -0.5, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0,
-            100.0, 100.0, 150.0, 100.0, 100.0, 200.0, 100.0, 200.0, 100.0, 100.0, 100.0, 200.0
-        ]
+    fn collect_cells(&self, mut x1: i32, mut y1: i32, mut x2: i32, mut y2: i32) -> Vec<f32> {
+        /*if self.universe.generation % 2 == 1 {
+            x1 -= 1;
+            y1 -= 1;
+            x2 -= 1;
+            y2 -= 1;            
+        }*/
+
+        let cell_iter = if self.universe.generation % 2 == 1 {
+            &self.universe.p10
+        } else {
+            &self.universe.p01
+        };
+        
+        let mut vertices = Vec::new();
+        let cell_size = 1;
+        for (coord, cell) in cell_iter {
+            //if coord.0 >= x1 as i64 && coord.0 <= x2 as i64 && coord.1 >= y1 as i64 && coord.1 <= y2 as i64 {
+                let mut num_shifts = 0;
+                let mut cell = cell.0;
+                //ConsoleService::new().log(&format!("cell: {:b} coord: {:?}", cell, coord));
+
+                while cell != 0 {
+
+                    if cell & 1 == 1 {
+                        let mut cell_x1 = x1.max((coord.0 as i32)*cell_size*4  + (3 - (num_shifts % 4)) * cell_size);
+                        let mut cell_y1 = y1.max((coord.1 as i32)*cell_size*8 + (7 - (num_shifts / 4)) * cell_size);
+                        let mut cell_x2 = x2.min(cell_x1 + cell_size);
+                        let mut cell_y2 = y2.min(cell_y1 + cell_size);
+
+                        if self.universe.generation % 2 == 1 {
+                            cell_x1 += cell_size;
+                            cell_y1 += cell_size;
+                            cell_x2 += cell_size;
+                            cell_y2 += cell_size;
+                        }
+                        
+                        vertices.append(&mut vec!(
+                            cell_x1 as f32, cell_y1 as f32,
+                            cell_x2 as f32, cell_y1 as f32,
+                            cell_x1 as f32, cell_y2 as f32,
+                            cell_x1 as f32, cell_y2 as f32,
+                            cell_x2 as f32, cell_y1 as f32,
+                            cell_x2 as f32, cell_y2 as f32));
+
+                            //ConsoleService::new().log(&format!("got: {:?}", vertices));
+
+                    }
+
+                    cell >>= 1;
+                    num_shifts += 1;
+                }
+            //}
+        }
+        vertices
     }
 }
 
@@ -253,23 +328,23 @@ mod life {
         Dead,
     }
     #[derive(Clone, Copy, PartialEq, Eq)]
-    struct Tile(u32);
+    pub struct Tile(pub u32);
 
     // x grows to the right
     // y grows down
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-    struct TCoord(i64, i64);
+    pub struct TCoord(pub i64, pub i64);
 
-    type TMap = FnvHashMap<TCoord, Tile>;
+    pub type TMap = FnvHashMap<TCoord, Tile>;
     type TSet = FnvHashSet<TCoord>;
 
     struct RuleTable(Box<[u32]>);
 
     pub struct Universe {
-        p01: TMap,
-        p10: TMap,
+        pub p01: TMap,
+        pub p10: TMap,
         active: TSet,
-        generation: u64,
+        pub generation: u64,
         rule_table: RuleTable,
     }
 
@@ -292,7 +367,7 @@ mod life {
     impl RuleTable {
 
         fn new(b: Vec<u32>, s: Vec<u32>) -> RuleTable {
-            let mut table = vec![0; 65512];
+            let mut table = vec![0; 65536];
 
             for idx in 0..table.len() {
                 let i = idx as u32;
@@ -523,7 +598,7 @@ mod life {
             }
         }
 
-        fn set_cell(&mut self, mut x: i64, mut y: i64) {
+        pub fn set_cell(&mut self, mut x: i64, mut y: i64) {
             // test both odd and even
             // test (0, 0), (-1, 0), (-1,-1), (-1, 2)
             // test 2^32, -2^32-1
