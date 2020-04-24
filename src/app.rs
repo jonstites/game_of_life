@@ -1,6 +1,6 @@
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGlBuffer, WebGlShader, WebGlProgram, WebGlUniformLocation};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGlBuffer, WebGlShader, WebGlProgram,WebGlContextAttributes,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
 use yew::services::{IntervalService, RenderService, Task, ConsoleService};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
@@ -11,8 +11,9 @@ extern crate js_sys;
 
 pub enum Msg {
     RenderGl,
-    Noop, // eventually make this "step"
     Step,
+    PlayOrPause,
+    StepIfNotPaused,
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -30,6 +31,7 @@ pub struct App {
     color_uniform_location: Option<WebGlUniformLocation>,
     x: i32,
     y: i32,
+    paused: bool,
 }
 
 impl Component for App {
@@ -38,7 +40,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(1000 / 30), link.callback(|_| Msg::Noop));
+        let handle = interval.spawn(Duration::from_millis(1000 / 30), link.callback(|_| Msg::StepIfNotPaused));
 
         App {
             canvas: None,
@@ -55,6 +57,7 @@ impl Component for App {
             color_uniform_location: None,
             x: 0,
             y: 0,
+            paused: true,
         }
     }
 
@@ -66,17 +69,24 @@ impl Component for App {
                 // case. This also allows for updating other UI elements that may be rendered in
                 // the DOM like a framerate counter, or other overlaid textual elements.
                 self.render_gl();
+                false
             },
             Msg::Step => {
                 self.universe.step();
                 //self.universe.step();
-                ConsoleService::new().log(&format!("cells: {:?}", self.universe.p01));
-            }
-            _ => {
-
-            }
-        }
-        false
+                false
+            },
+            Msg::PlayOrPause => {
+                self.paused = !self.paused;
+                true
+            },
+            Msg::StepIfNotPaused => {
+                if !self.paused {
+                    self.universe.step();
+                }
+                false
+            },
+        }        
     }
     fn mounted(&mut self) -> ShouldRender {
         // Once mounted, store references for the canvas and GL context. These can be used for
@@ -107,8 +117,8 @@ impl Component for App {
         self.universe.set_cell(4, 4);
 
 
-        for x in 0..1000 {
-            for y in 0..1000 {
+        for x in 0..500 {
+            for y in 0..500 {
                 if js_sys::Math::random() < 0.2 {
                     self.universe.set_cell(x, y);
                 }
@@ -124,14 +134,19 @@ impl Component for App {
     }
 
     fn view(&self) -> Html {
-        // TODO fix two body's
+        let play_or_pause = if self.paused {
+            "Play"
+        } else {
+            "Pause"
+        };
+
         html! {
                 <div>
-                
+                <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
-                    <canvas ref={self.node_ref.clone()}>
+                <canvas ref={self.node_ref.clone()}>
                     { "This text is displayed if your browser does not support HTML5 Canvas." }
-                    </canvas>
+                </canvas>
                 </div>
         }
     }
@@ -166,6 +181,9 @@ impl App {
         // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
         gl.bind_buffer(GL::ARRAY_BUFFER, self.position_buffer.as_ref());
         self.program = Some(program);
+
+        // turn off antialias 
+        gl.get_context_attributes().unwrap().antialias(false);
     }
 
     fn create_shader(&self, gl: &mut GL, shader_type: u32, shader_source: &str) -> WebGlShader {
@@ -234,7 +252,6 @@ impl App {
         let count = vertices.len() as i32 / 2;
 
         gl.draw_arrays(primitive_type, offset, count as i32);
-        self.universe.step();
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
         // A reference to the new handle must be retained for the next render to run.
@@ -256,60 +273,29 @@ impl App {
         }
     }
 
-    fn collect_cells(&self, mut x1: i32, mut y1: i32, mut x2: i32, mut y2: i32) -> Vec<f32> {
-        /*if self.universe.generation % 2 == 1 {
-            x1 -= 1;
-            y1 -= 1;
-            x2 -= 1;
-            y2 -= 1;            
-        }*/
-
-        let cell_iter = if self.universe.generation % 2 == 1 {
-            &self.universe.p10
-        } else {
-            &self.universe.p01
-        };
+    fn collect_cells(&self, x1: i32, y1: i32, x2: i32, y2: i32) -> Vec<f32> {
         
         let mut vertices = Vec::new();
-        let cell_size = 1;
-        for (coord, cell) in cell_iter {
-            //if coord.0 >= x1 as i64 && coord.0 <= x2 as i64 && coord.1 >= y1 as i64 && coord.1 <= y2 as i64 {
-                let mut num_shifts = 0;
-                let mut cell = cell.0;
-                //ConsoleService::new().log(&format!("cell: {:b} coord: {:?}", cell, coord));
-
-                while cell != 0 {
-
-                    if cell & 1 == 1 {
-                        let mut cell_x1 = x1.max((coord.0 as i32)*cell_size*4  + (3 - (num_shifts % 4)) * cell_size);
-                        let mut cell_y1 = y1.max((coord.1 as i32)*cell_size*8 + (7 - (num_shifts / 4)) * cell_size);
-                        let mut cell_x2 = x2.min(cell_x1 + cell_size);
-                        let mut cell_y2 = y2.min(cell_y1 + cell_size);
-
-                        if self.universe.generation % 2 == 1 {
-                            cell_x1 += cell_size;
-                            cell_y1 += cell_size;
-                            cell_x2 += cell_size;
-                            cell_y2 += cell_size;
-                        }
-                        
-                        vertices.append(&mut vec!(
-                            cell_x1 as f32, cell_y1 as f32,
-                            cell_x2 as f32, cell_y1 as f32,
-                            cell_x1 as f32, cell_y2 as f32,
-                            cell_x1 as f32, cell_y2 as f32,
-                            cell_x2 as f32, cell_y1 as f32,
-                            cell_x2 as f32, cell_y2 as f32));
-
-                            //ConsoleService::new().log(&format!("got: {:?}", vertices));
-
-                    }
-
-                    cell >>= 1;
-                    num_shifts += 1;
+        let cell_size = 3;
+        for cell in self.universe.live_cells() {
+            let cell_x1 = cell.0 * cell_size;
+            let cell_y1 = cell.1 * cell_size;
+            let cell_x2 = cell_x1 + cell_size;
+            let cell_y2 = cell_y1 + cell_size;
+            if (cell_x1 > x1 as i64 || cell_x2 < x2 as i64) && (cell_y1 > y1 as i64 || cell_y2 < y2 as i64) {
+                let cell_x1 = cell_x1 as f32 - x1 as f32;
+                let cell_x2 = cell_x2 as f32 - x1 as f32;;
+                let cell_y1 = cell_y1 as f32 - y1 as f32;
+                let cell_y2 = cell_y2 as f32 - y1 as f32;
+                vertices.append(&mut vec!(
+                            cell_x1, cell_y1,
+                            cell_x2, cell_y1,
+                            cell_x1, cell_y2,
+                            cell_x1, cell_y2,
+                            cell_x2, cell_y1,
+                            cell_x2, cell_y2));
                 }
-            //}
-        }
+            }
         vertices
     }
 }
@@ -318,9 +304,6 @@ impl App {
 mod life {
     use fnv::{FnvHashMap, FnvHashSet};
     use std::ops::{Add, Sub};
-    use web_sys::WebGl2RenderingContext as GL;
-    use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Element, WebGlBuffer, WebGlProgram, WebGlUniformLocation};
-    use yew::NodeRef;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum CellState {
@@ -656,6 +639,41 @@ mod life {
                 self.active.insert(coord + TCoord(1, 0));
                 self.active.insert(coord + TCoord(0, 1));
             }
+        }
+
+        pub fn live_cells(&self) -> Vec<(i64, i64)> {
+            let mut cells = Vec::new();
+
+            if self.generation % 2 == 1 {
+                for (coord, cell) in &self.p10 {
+                    let mut cell = cell.0;
+                    let mut num_shifts = 0;
+                    while cell != 0 {
+                        if cell & 1 == 1 {
+                            let x = coord.0 * 4 + (3 - (num_shifts % 4));
+                            let y = coord.1 * 8 + (7 - (num_shifts / 4));
+                            cells.push((x + 1, y + 1));
+                        }
+                        num_shifts += 1;
+                        cell >>= 1;
+                    }
+                }
+            } else {
+                for (coord, cell) in &self.p01 {
+                    let mut cell = cell.0;
+                    let mut num_shifts = 0;
+                    while cell != 0 {
+                        if cell & 1 == 1 {
+                            let x = coord.0 * 4 + (3 - (num_shifts % 4));
+                            let y = coord.1 * 8 + (7 - (num_shifts / 4));
+                            cells.push((x, y));
+                        }
+                        num_shifts += 1;
+                        cell >>= 1;
+                    }
+                }
+            }
+            cells
         }
 
         // use include_str! for popular patterns

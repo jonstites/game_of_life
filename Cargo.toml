@@ -21,7 +21,7 @@ web-sys = {version = "0.3.37", features = [
     'HtmlCanvasElement',
     'HtmlElement',
     'WebGlBuffer', 'WebGlProgram', 'WebGl2RenderingContext',
-    'WebGlShader', 'WebGlUniformLocation',
+    'WebGlShader', 'WebGlUniformLocation', 'WebGlContextAttributes'
 ]}
 fnv = "1.0.6"
 
