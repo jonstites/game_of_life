@@ -1,13 +1,16 @@
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use web_sys::{HtmlCanvasElement, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
+use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
-use yew::services::{IntervalService, RenderService, Task};
+use yew::services::{ConsoleService, IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
 
 use std::time::Duration;
 
 extern crate js_sys;
+
+const MOVE_THRESHOLD: i32 = 3;
+const DEFAULT_CELL_SIZE: f32 = 5.0;
 
 pub enum Msg {
     RenderGl,
@@ -15,6 +18,9 @@ pub enum Msg {
     PlayOrPause,
     StepIfNotPaused,
     Zoom(WheelEvent),
+    ToggleOrStartMove(MouseEvent),
+    MaybeMove(MouseEvent),
+    ToggleOrEndMove(MouseEvent),
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -25,6 +31,7 @@ pub struct App {
     #[allow(dead_code)]
     timer: Box<dyn Task>,
     universe: life::Universe,
+    vertices: js_sys::Float32Array,
     program: Option<WebGlProgram>,
     position_attribute_location: Option<u32>,
     position_buffer: Option<WebGlBuffer>,
@@ -34,6 +41,8 @@ pub struct App {
     y: i32,
     paused: bool,
     cell_size: f32,
+    move_start: Option<(i32, i32)>,
+    is_moving: bool,
 }
 
 impl Component for App {
@@ -52,6 +61,7 @@ impl Component for App {
             render_loop: None,
             timer: Box::new(handle),
             universe: life::Universe::new(vec!(3), vec!(2, 3)),
+            vertices: js_sys::Float32Array::new_with_length(0),
             program: None,
             position_attribute_location: None,
             position_buffer: None,
@@ -60,7 +70,9 @@ impl Component for App {
             x: 0,
             y: 0,
             paused: true,
-            cell_size: 5.0,
+            cell_size: DEFAULT_CELL_SIZE,
+            move_start: None,
+            is_moving: false,
         }
     }
 
@@ -90,7 +102,31 @@ impl Component for App {
                 false
             },
             Msg::Zoom(event) => {
-                self.cell_size += event.delta_y() as f32 * -0.05;
+                self.cell_size += event.delta_y() as f32 * -0.02;
+                false
+            },
+            Msg::ToggleOrStartMove(mouse_event) => {
+                self.move_start = Some((mouse_event.client_x(), mouse_event.client_y()));
+                false
+            },
+            Msg::MaybeMove(mouse_event) => {
+
+                if let Some((start_x, start_y)) = self.move_start {
+                    if (start_x - mouse_event.client_x()).abs() > MOVE_THRESHOLD || (start_y - mouse_event.client_y()).abs() > MOVE_THRESHOLD {
+                        self.is_moving = true;
+                    }
+
+                    if self.is_moving {
+                        self.x -= mouse_event.client_x() - start_x;
+                        self.y -= mouse_event.client_y() - start_y;
+                        self.move_start = Some((mouse_event.client_x(), mouse_event.client_y()));
+                    }
+                }
+                false
+            },
+            Msg::ToggleOrEndMove(mouse_event) => {
+                self.is_moving = false;
+                self.move_start = None;
                 false
             }
         }        
@@ -115,8 +151,8 @@ impl Component for App {
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
 
-        for x in 100..200 {
-            for y in 100..200 {
+        for x in 0..500 {
+            for y in 0..500 {
                 if js_sys::Math::random() < 0.2 {
                     self.universe.set_cell(x, y);
                 }
@@ -142,8 +178,13 @@ impl Component for App {
                 <div> 
                 <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
-                <canvas ref={self.node_ref.clone()} onmousewheel=self.link.callback(|event| Msg::Zoom(event))>
-                    { "This text is displayed if your browser does not support HTML5 Canvas." }
+                <canvas 
+                    ref={self.node_ref.clone()} 
+                    onmousewheel=self.link.callback(|event| Msg::Zoom(event))
+                    onmousedown=self.link.callback(|event| Msg::ToggleOrStartMove(event))
+                    onmousemove=self.link.callback(|event| Msg::MaybeMove(event))
+                    onmouseup=self.link.callback(|event| Msg::ToggleOrEndMove(event))>
+                        { "This text is displayed if your browser does not support HTML5 Canvas." }
                 </canvas>
                 </div>
         }
@@ -241,13 +282,25 @@ impl App {
         gl.uniform4f (self.color_uniform_location.as_ref(), 0.0, 1.0, 0.0, 1.0);
 
         let vertices: Vec<f32> = self.collect_cells(self.x, self.y, self.x + canvas.width() as i32, self.y + canvas.height() as i32);
-        let verts = js_sys::Float32Array::from(vertices.as_slice());
-        gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &verts, GL::STATIC_DRAW);
+
+        // Creating a new Float32Array leads to painfully noticeable Garbage Collection
+        // So instead, let's reuse the same array as much as possible.
+        if vertices.len() as u32 > self.vertices.length() {
+            self.vertices = js_sys::Float32Array::new_with_length(vertices.len() as u32 * 2);
+        } else {
+            self.vertices.fill(0.0, vertices.len() as u32, self.vertices.length());
+        }
+        
+        for (idx, value) in vertices.into_iter().enumerate() {
+            self.vertices.set_index(idx as u32, value);
+        }
+
+        gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &self.vertices, GL::STATIC_DRAW);
 
         // Draw the rectangle
         let primitive_type = GL::TRIANGLES;
         let offset = 0;
-        let count = vertices.len() as i32 / 2;
+        let count = self.vertices.length() as i32 / 2;
 
         gl.draw_arrays(primitive_type, offset, count as i32);
         let render_frame = self.link.callback(|_| Msg::RenderGl);
