@@ -10,7 +10,9 @@ use std::time::Duration;
 extern crate js_sys;
 
 const MOVE_THRESHOLD: i32 = 3;
-const DEFAULT_CELL_SIZE: f32 = 5.0;
+const DEFAULT_CELL_SIZE: f32 = 30.0;
+const DEFAULT_ZOOM: f32 = -0.02;
+const RANDOMIZE_FRACTION: f64 = 0.20;
 
 pub enum Msg {
     RenderGl,
@@ -21,6 +23,8 @@ pub enum Msg {
     ToggleOrStartMove(MouseEvent),
     MaybeMove(MouseEvent),
     ToggleOrEndMove(MouseEvent),
+    Randomize,
+    Clear,
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -102,7 +106,8 @@ impl Component for App {
                 false
             },
             Msg::Zoom(event) => {
-                self.cell_size += event.delta_y() as f32 * -0.02;
+                self.cell_size += event.delta_y() as f32 * DEFAULT_ZOOM * self.cell_size;
+                ConsoleService::new().log(&format!("cell size: {} delta y: {}", self.cell_size, event.delta_y()));
                 false
             },
             Msg::ToggleOrStartMove(mouse_event) => {
@@ -125,8 +130,32 @@ impl Component for App {
                 false
             },
             Msg::ToggleOrEndMove(mouse_event) => {
+
+                if !self.is_moving {
+                    let canvas_rect = self.canvas.as_ref().unwrap().get_bounding_client_rect();
+                    let x = (((mouse_event.client_x() + self.x) as f32 - canvas_rect.left() as f32) / self.cell_size) as i64;
+                    let y = (((mouse_event.client_y() + self.y) as f32 - canvas_rect.top() as f32) / self.cell_size) as i64;
+                    ConsoleService::new().log(&format!("x: {} y: {} client x: {} client y: {}", x, y, mouse_event.client_x(), mouse_event.client_y()));
+                    self.universe.toggle_cell(x, y);
+                }
+
                 self.is_moving = false;
                 self.move_start = None;
+                false
+            },
+            Msg::Randomize => {
+
+                for x in (self.x as f32 / self.cell_size) as i32..=((self.x as f32 + self.canvas.as_ref().unwrap().width() as f32) / self.cell_size) as i32 {
+                    for y in (self.y as f32 / self.cell_size) as i32..=((self.y as f32 + self.canvas.as_ref().unwrap().height() as f32) / self.cell_size) as i32 {
+                        if js_sys::Math::random() < RANDOMIZE_FRACTION {
+                            self.universe.set_cell(x as i64, y as i64);
+                        }
+                    }
+                }
+                false
+            },
+            Msg::Clear => {
+                self.universe.clear();
                 false
             }
         }        
@@ -151,13 +180,6 @@ impl Component for App {
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
 
-        for x in 0..500 {
-            for y in 0..500 {
-                if js_sys::Math::random() < 0.2 {
-                    self.universe.set_cell(x, y);
-                }
-            }
-        }
 
         // A reference to the handle must be stored, otherwise it is dropped and the render won't
         // occur.
@@ -178,6 +200,8 @@ impl Component for App {
                 <div> 
                 <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
+                <button class="game-button" onclick=self.link.callback(|_| Msg::Randomize)>{ "Randomize" }</button>
+                <button class="game-button" onclick=self.link.callback(|_| Msg::Clear)>{ "Clear" }</button>
                 <canvas 
                     ref={self.node_ref.clone()} 
                     onmousewheel=self.link.callback(|event| Msg::Zoom(event))
@@ -361,6 +385,14 @@ mod life {
         Alive,
         Dead,
     }
+
+    enum CellAction {
+        Birth,
+        Death,
+        Toggle,
+        Noop,        
+    }
+
     #[derive(Clone, Copy, PartialEq, Eq)]
     pub struct Tile(pub u32);
 
@@ -474,6 +506,12 @@ mod life {
             }
         }
 
+        pub fn clear(&mut self) {
+            self.p01 = TMap::default();
+            self.p10 = TMap::default();
+            self.active = TSet::default();
+        }
+
         pub fn step(&mut self) {
             let is_even = self.generation % 2 == 0;
             if is_even {
@@ -582,11 +620,8 @@ mod life {
             )
         }
 
-        fn get_cell(&self, mut x: i64, mut y: i64) -> CellState {
-            // test both odd and even
-            // test (0, 0), (-1, 0), (-1,-1), (-1, 2)
-            // test 2^32, -2^32-1
-
+        fn perform_cell_action(&mut self, mut x: i64, mut y: i64, action: CellAction) -> CellState {
+            
             if self.generation % 2 == 1 {
                 x -= 1;
                 y -= 1;
@@ -599,56 +634,6 @@ mod life {
             };
 
             let coord_y = if y > 0 {
-                y / 8
-            } else {
-                (y / 8) + ((y % 8) - 7) / 8
-            };
-
-            let coord = TCoord(coord_x, coord_y);
-            
-            let tile = if self.generation % 2 == 0 {
-                self.p01.get(&coord).cloned().unwrap_or(Tile(0))
-            } else {
-                self.p10.get(&coord).cloned().unwrap_or(Tile(0))
-            };
-
-
-            let t_x = if x >= 0 {
-                x % 4
-            } else {
-                ((x % 4) + 4) % 4
-            };
-
-            let t_y = if y >= 0 {
-                y % 8
-            } else {
-                ((y % 8) + 8) % 8
-            };
-
-            if tile.0 >> (31 - 4*t_y - t_x) & 1 != 0 {
-                CellState::Alive
-            } else {
-                CellState::Dead
-            }
-        }
-
-        pub fn set_cell(&mut self, mut x: i64, mut y: i64) {
-            // test both odd and even
-            // test (0, 0), (-1, 0), (-1,-1), (-1, 2)
-            // test 2^32, -2^32-1
-
-            if self.generation % 2 == 1 {
-                x -= 1;
-                y -= 1;
-            }
-
-            let coord_x = if x >= 0 {
-                x / 4
-            } else {
-                (x / 4) + ((x % 4) - 3) / 4
-            };
-
-            let coord_y = if y >= 0 {
                 y / 8
             } else {
                 (y / 8) + ((y % 8) - 7) / 8
@@ -674,22 +659,79 @@ mod life {
             } else {
                 ((y % 8) + 8) % 8
             };
-            
-            tile.0 |= 1 << (31 - 4*t_y - t_x);
 
-            if self.generation % 2 == 0 {
-                self.p01.insert(coord, tile);
-                self.active.insert(coord);
-                self.active.insert(coord - TCoord(1, 1));
-                self.active.insert(coord - TCoord(1, 0));
-                self.active.insert(coord - TCoord(0, 1));
+            match action {
+                CellAction::Birth => {
+                    tile.0 |= 1 << (31 - 4*t_y - t_x);
+                    if self.generation % 2 == 0 {
+                        self.p01.insert(coord, tile);
+                        self.active.insert(coord);
+                        self.active.insert(coord - TCoord(1, 1));
+                        self.active.insert(coord - TCoord(1, 0));
+                        self.active.insert(coord - TCoord(0, 1));
+                    } else {
+                        self.p10.insert(coord, tile);
+                        self.active.insert(coord);
+                        self.active.insert(coord + TCoord(1, 1));
+                        self.active.insert(coord + TCoord(1, 0));
+                        self.active.insert(coord + TCoord(0, 1));
+                    }           
+                },
+                CellAction::Death => {
+                    tile.0 &= !(1 << (31 - 4*t_y - t_x));
+                    if self.generation % 2 == 0 {
+                        self.p01.insert(coord, tile);
+                        self.active.insert(coord);
+                        self.active.insert(coord - TCoord(1, 1));
+                        self.active.insert(coord - TCoord(1, 0));
+                        self.active.insert(coord - TCoord(0, 1));
+                    } else {
+                        self.p10.insert(coord, tile);
+                        self.active.insert(coord);
+                        self.active.insert(coord + TCoord(1, 1));
+                        self.active.insert(coord + TCoord(1, 0));
+                        self.active.insert(coord + TCoord(0, 1));
+                    }
+                },
+                CellAction::Toggle => {
+                    tile.0 ^= 1 << (31 - 4*t_y - t_x);
+                    if self.generation % 2 == 0 {
+                        self.p01.insert(coord, tile);
+                        self.active.insert(coord);
+                        self.active.insert(coord - TCoord(1, 1));
+                        self.active.insert(coord - TCoord(1, 0));
+                        self.active.insert(coord - TCoord(0, 1));
+                    } else {
+                        self.p10.insert(coord, tile);
+                        self.active.insert(coord);
+                        self.active.insert(coord + TCoord(1, 1));
+                        self.active.insert(coord + TCoord(1, 0));
+                        self.active.insert(coord + TCoord(0, 1));
+                    }
+                }
+                CellAction::Noop => {}
+            };
+            if tile.0 >> (31 - 4*t_y - t_x) & 1 != 0 {
+                CellState::Alive
             } else {
-                self.p10.insert(coord, tile);
-                self.active.insert(coord);
-                self.active.insert(coord + TCoord(1, 1));
-                self.active.insert(coord + TCoord(1, 0));
-                self.active.insert(coord + TCoord(0, 1));
+                CellState::Dead
             }
+        }
+
+        fn get_cell(&mut self, x: i64, y: i64) -> CellState {
+            self.perform_cell_action(x, y, CellAction::Noop)
+        }
+
+        pub fn set_cell(&mut self, mut x: i64, mut y: i64) {
+            self.perform_cell_action(x, y, CellAction::Birth);
+        }
+
+        pub fn kill_cell(&mut self, mut x: i64, mut y: i64) {
+            self.perform_cell_action(x, y, CellAction::Death);
+        }
+
+        pub fn toggle_cell(&mut self, mut x: i64, mut y: i64) {
+            self.perform_cell_action(x, y, CellAction::Toggle);
         }
 
         pub fn live_cells(&self) -> Vec<(i64, i64)> {
