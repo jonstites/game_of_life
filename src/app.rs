@@ -1,8 +1,8 @@
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGlBuffer, WebGlShader, WebGlProgram,WebGlContextAttributes,WebGlUniformLocation};
+use web_sys::{HtmlCanvasElement, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
-use yew::services::{IntervalService, RenderService, Task, ConsoleService};
+use yew::services::{IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
 
 use std::time::Duration;
@@ -14,6 +14,7 @@ pub enum Msg {
     Step,
     PlayOrPause,
     StepIfNotPaused,
+    Zoom(WheelEvent),
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -32,6 +33,7 @@ pub struct App {
     x: i32,
     y: i32,
     paused: bool,
+    cell_size: f32,
 }
 
 impl Component for App {
@@ -58,6 +60,7 @@ impl Component for App {
             x: 0,
             y: 0,
             paused: true,
+            cell_size: 5.0,
         }
     }
 
@@ -86,6 +89,10 @@ impl Component for App {
                 }
                 false
             },
+            Msg::Zoom(event) => {
+                self.cell_size += event.delta_y() as f32 * -0.05;
+                false
+            }
         }        
     }
     fn mounted(&mut self) -> ShouldRender {
@@ -108,17 +115,8 @@ impl Component for App {
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
 
-        self.universe.set_cell(0, 0);
-        self.universe.set_cell(1, 0);
-        self.universe.set_cell(2, 0);
-        self.universe.set_cell(2, -1);
-        self.universe.set_cell(1, -2);
-
-        self.universe.set_cell(4, 4);
-
-
-        for x in 0..500 {
-            for y in 0..500 {
+        for x in 100..200 {
+            for y in 100..200 {
                 if js_sys::Math::random() < 0.2 {
                     self.universe.set_cell(x, y);
                 }
@@ -141,10 +139,10 @@ impl Component for App {
         };
 
         html! {
-                <div>
+                <div> 
                 <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
-                <canvas ref={self.node_ref.clone()}>
+                <canvas ref={self.node_ref.clone()} onmousewheel=self.link.callback(|event| Msg::Zoom(event))>
                     { "This text is displayed if your browser does not support HTML5 Canvas." }
                 </canvas>
                 </div>
@@ -218,7 +216,7 @@ impl App {
         
         gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
         
-        gl.clear_color(0_f32, 0_f32, 0_f32, 0_f32);
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(GL::COLOR_BUFFER_BIT);
 
         gl.use_program(self.program.as_ref());
@@ -240,7 +238,7 @@ impl App {
         // set the resolution
         gl.uniform2f(self.resolution_uniform_location.as_ref(), canvas.width() as f32, canvas.height() as f32);
         // set the color
-        gl.uniform4f (self.color_uniform_location.as_ref(), 1.0, 0.0, 0.0, 1.0);
+        gl.uniform4f (self.color_uniform_location.as_ref(), 0.0, 1.0, 0.0, 1.0);
 
         let vertices: Vec<f32> = self.collect_cells(self.x, self.y, self.x + canvas.width() as i32, self.y + canvas.height() as i32);
         let verts = js_sys::Float32Array::from(vertices.as_slice());
@@ -276,15 +274,15 @@ impl App {
     fn collect_cells(&self, x1: i32, y1: i32, x2: i32, y2: i32) -> Vec<f32> {
         
         let mut vertices = Vec::new();
-        let cell_size = 3;
+        let cell_size = self.cell_size;
         for cell in self.universe.live_cells() {
-            let cell_x1 = cell.0 * cell_size;
-            let cell_y1 = cell.1 * cell_size;
+            let cell_x1 = cell.0 as f32 * cell_size;
+            let cell_y1 = cell.1 as f32 * cell_size;
             let cell_x2 = cell_x1 + cell_size;
             let cell_y2 = cell_y1 + cell_size;
-            if (cell_x1 > x1 as i64 || cell_x2 < x2 as i64) && (cell_y1 > y1 as i64 || cell_y2 < y2 as i64) {
+            if (cell_x1 > x1 as f32 || cell_x2 < x2 as f32) && (cell_y1 > y1 as f32 || cell_y2 < y2 as f32) {
                 let cell_x1 = cell_x1 as f32 - x1 as f32;
-                let cell_x2 = cell_x2 as f32 - x1 as f32;;
+                let cell_x2 = cell_x2 as f32 - x1 as f32;
                 let cell_y1 = cell_y1 as f32 - y1 as f32;
                 let cell_y2 = cell_y2 as f32 - y1 as f32;
                 vertices.append(&mut vec!(
