@@ -8,9 +8,6 @@ cache:
   - cargo
   - yarn
 
-before_install:
-  - yarn install wasm-pack-plugin -G
-
 jobs:
   script:
     - yarn build
