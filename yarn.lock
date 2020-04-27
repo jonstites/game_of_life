@@ -26,10 +26,10 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-13.13.4.tgz#1581d6c16e3d4803eb079c87d4ac893ee7501c2c"
   integrity sha512-x26ur3dSXgv5AwKS0lNfbjpCakGIduWU1DU91Zz58ONRWrIKGunmZBNv4P7N+e27sJkiGDsw/3fT4AtsqQBrBA==
 
-"@wasm-tool/wasm-pack-plugin@1.3.1":
-  version "1.3.1"
-  resolved "https://registry.yarnpkg.com/@wasm-tool/wasm-pack-plugin/-/wasm-pack-plugin-1.3.1.tgz#eb8dbeeb3c0ce9af413347d3332485b9f5d4f103"
-  integrity sha512-8AXgN80fbbLvuROYuNsBow/MiK+VeNCzZ3WyCxwZKMIyISd1WwompVG0pLMypXd4rYnttsRyXvQqW3vDdoXZRg==
+"@wasm-tool/wasm-pack-plugin@1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@wasm-tool/wasm-pack-plugin/-/wasm-pack-plugin-1.3.0.tgz#8cb18a07fb35186e84b6973ad2c03b85a64ad64e"
+  integrity sha512-NyzsqNuDK1qo7FKEgSywaxp/6GtqeaTW93s7/LJ4wjWvLn6oUVVlrQhWoF4jdbZ8Cm4llv4sMlxz+BoDmccTog==
   dependencies:
     chalk "^2.4.1"
     command-exists "^1.2.7"
