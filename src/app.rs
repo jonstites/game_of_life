@@ -207,9 +207,16 @@ impl Component for App {
 
                 if !self.is_moving {
                     let canvas_rect = self.canvas.as_ref().unwrap().get_bounding_client_rect();
-                    let x = (((mouse_event.client_x() + self.x) as f32 - canvas_rect.left() as f32) / self.cell_size) as i64;
-                    let y = (((mouse_event.client_y() + self.y) as f32 - canvas_rect.top() as f32) / self.cell_size) as i64;
-                    
+                    let mut x = (((mouse_event.client_x() + self.x) as f32 - canvas_rect.left() as f32) / self.cell_size) as i64;
+                    let mut y = (((mouse_event.client_y() + self.y) as f32 - canvas_rect.top() as f32) / self.cell_size) as i64;
+
+                    if x < 0 {
+                        x -= 1;
+                    }
+                    if y < 0 {
+                        y -= 1;
+                    }
+
                     match self.pattern {
                         Pattern::ToggleCell => self.universe.toggle_cell(x, y),
                         Pattern::Glider => self.universe.set_rle(x, y, include_str!("patterns/conway/glider.rle")),
