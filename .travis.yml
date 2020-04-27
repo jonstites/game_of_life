@@ -1,3 +1,5 @@
+dist: bionic
+
 language:
   - rust
   - node_js
@@ -13,11 +15,13 @@ before_install:
 
 before_script:
   - yarn install
-
+  - node --version
+  - yarn global add wasm-pack  
+  - wasm-pack --version
+  - webpack --version
+  
 jobs:
   script:
-    - yarn global add wasm-pack
-    - wasm-pack --version
     - cargo test
     - yarn build
   
