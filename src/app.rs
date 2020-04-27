@@ -2,7 +2,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
-use yew::services::{ConsoleService, IntervalService, RenderService, Task};
+use yew::services::{IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender, components::Select};
 
 use std::time::Duration;
@@ -1073,25 +1073,6 @@ mod life {
 
             let expected = 5;
             assert_eq!(expected, universe.p01.values().map(|v| v.0.count_ones()).sum::<u32>());
-        }
-
-        extern crate test;    
-        use test::{Bencher, black_box};
-
-        #[bench]
-        fn bench_p01_calc(b: &mut Bencher) {
-            let universe = Universe::default();
-            let tile = Tile(0xc800_2220);
-            let right = Tile(0x8880_0008);
-            let down = Tile(0xd200_0000);
-            let downright = Tile(0x8000_0000);
-
-            b.iter(|| {
-                // Inner closure, the actual test
-                for _i in 1..100 {
-                    black_box(universe.p01_calc(tile, right, down, downright));
-                }
-            });
         }
     }
 }   
