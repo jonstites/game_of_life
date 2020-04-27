@@ -1,0 +1,8 @@
+#N 4c/9 ladders
+#O Dean Hickerson
+#C Several related 4c/9 ladders for the Life without death rule, found
+#C  in 2000.
+#C www.conwaylife.com/wiki/index.php?title=Life_without_death
+x = 20, y = 258, rule = b3/s012345678
+3bobo14b$b7o12b$b3ob3o12b$9o11b$b9o10b$bob3ob2o11b$4ob3o12b$b8o11b$4ob
+3o12b$bob3ob2o11b$b9o10b$9o11b$b3ob3o12b$b7o12b$3bobo14b!

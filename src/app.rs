@@ -31,6 +31,11 @@ pub enum Pattern {
     Sawtooth1212,
     Homer,
     DRHOscillators,
+    C3Ladder,
+    C4Ladder,
+    QuadraticGrowth,
+    P200Oscillator,
+    LFODMisc,
 }
 
 impl ToString for Pattern {
@@ -49,7 +54,31 @@ impl ToString for Pattern {
             Pattern::Acorn => "Acorn".to_string(),
             Pattern::Sawtooth1212 => "Sawtooth 1212".to_string(),
             Pattern::Homer => "Homer".to_string(),
-            Pattern::DRHOscillators => "Oscillator Collection".to_string(),
+            Pattern::DRHOscillators => "Oscillator collection".to_string(),
+            Pattern::C3Ladder => "c/3 ladder".to_string(),
+            Pattern::C4Ladder => "c/4 ladder".to_string(),
+            Pattern::QuadraticGrowth => "Quadratic growth".to_string(),
+            Pattern::P200Oscillator => "p200 oscillator".to_string(),
+            Pattern::LFODMisc => "Miscellaneous".to_string(),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum RuleSet {
+    LifeWithoutDeath,
+    Conway,
+    DayAndNight,
+    LiveFreeOrDie,
+}
+
+impl ToString for RuleSet {
+    fn to_string(&self) -> String {
+        match self {
+            RuleSet::Conway => "Conway - B3/S23".to_string(),
+            RuleSet::LifeWithoutDeath => "Life without death - B3/S012345678".to_string(),
+            RuleSet::DayAndNight => "Day & Night - B3678/S34678".to_string(),
+            RuleSet::LiveFreeOrDie => "Live Free Or Die - B2/S0".to_string(),
         }
     }
 }
@@ -66,6 +95,7 @@ pub enum Msg {
     Randomize,
     Clear,
     SetPattern(Pattern),
+    SetRuleSet(RuleSet),
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -89,6 +119,7 @@ pub struct App {
     move_start: Option<(i32, i32)>,
     is_moving: bool,
     pattern: Pattern,
+    ruleset: RuleSet,
 }
 
 impl Component for App {
@@ -120,6 +151,7 @@ impl Component for App {
             move_start: None,
             is_moving: false,
             pattern: Pattern::ToggleCell,
+            ruleset: RuleSet::Conway,
         }
     }
 
@@ -180,19 +212,24 @@ impl Component for App {
                     
                     match self.pattern {
                         Pattern::ToggleCell => self.universe.toggle_cell(x, y),
-                        Pattern::Glider => self.universe.set_rle(x, y, include_str!("patterns/glider.rle")),
-                        Pattern::Pulsar => self.universe.set_rle(x, y, include_str!("patterns/pulsar.rle")),
-                        Pattern::Pentadecathlon => self.universe.set_rle(x, y, include_str!("patterns/pentadecathlon.rle")),
-                        Pattern::LWSS => self.universe.set_rle(x, y, include_str!("patterns/lwss.rle")),
-                        Pattern::MWSS => self.universe.set_rle(x, y, include_str!("patterns/mwss.rle")),
-                        Pattern::HWSS => self.universe.set_rle(x, y, include_str!("patterns/hwss.rle")),
-                        Pattern::GosperGliderGun => self.universe.set_rle(x, y, include_str!("patterns/gosper_glider_gun.rle")),
-                        Pattern::RPentamino => self.universe.set_rle(x, y, include_str!("patterns/r_pentamino.rle")),
-                        Pattern::Diehard => self.universe.set_rle(x, y, include_str!("patterns/diehard.rle")),
-                        Pattern::Acorn => self.universe.set_rle(x, y, include_str!("patterns/acorn.rle")),
-                        Pattern::Sawtooth1212 => self.universe.set_rle(x, y, include_str!("patterns/sawtooth_1212.rle")),
-                        Pattern::Homer => self.universe.set_rle(x, y, include_str!("patterns/homer.rle")),
-                        Pattern::DRHOscillators => self.universe.set_rle(x, y, include_str!("patterns/DRH_oscillators.rle")),
+                        Pattern::Glider => self.universe.set_rle(x, y, include_str!("patterns/conway/glider.rle")),
+                        Pattern::Pulsar => self.universe.set_rle(x, y, include_str!("patterns/conway/pulsar.rle")),
+                        Pattern::Pentadecathlon => self.universe.set_rle(x, y, include_str!("patterns/conway/pentadecathlon.rle")),
+                        Pattern::LWSS => self.universe.set_rle(x, y, include_str!("patterns/conway/lwss.rle")),
+                        Pattern::MWSS => self.universe.set_rle(x, y, include_str!("patterns/conway/mwss.rle")),
+                        Pattern::HWSS => self.universe.set_rle(x, y, include_str!("patterns/conway/hwss.rle")),
+                        Pattern::GosperGliderGun => self.universe.set_rle(x, y, include_str!("patterns/conway/gosper_glider_gun.rle")),
+                        Pattern::RPentamino => self.universe.set_rle(x, y, include_str!("patterns/conway/r_pentamino.rle")),
+                        Pattern::Diehard => self.universe.set_rle(x, y, include_str!("patterns/conway/diehard.rle")),
+                        Pattern::Acorn => self.universe.set_rle(x, y, include_str!("patterns/conway/acorn.rle")),
+                        Pattern::Sawtooth1212 => self.universe.set_rle(x, y, include_str!("patterns/conway/sawtooth_1212.rle")),
+                        Pattern::Homer => self.universe.set_rle(x, y, include_str!("patterns/conway/homer.rle")),
+                        Pattern::DRHOscillators => self.universe.set_rle(x, y, include_str!("patterns/conway/DRH_oscillators.rle")),
+                        Pattern::C3Ladder => self.universe.set_rle(x, y, include_str!("patterns/life_without_death/c3_ladder.rle")),
+                        Pattern::C4Ladder => self.universe.set_rle(x, y, include_str!("patterns/life_without_death/c4_ladder.rle")),
+                        Pattern::QuadraticGrowth => self.universe.set_rle(x, y, include_str!("patterns/life_without_death/quadratic_growth.rle")),
+                        Pattern::P200Oscillator => self.universe.set_rle(x, y, include_str!("patterns/day_and_night/p200_oscillator.rle")),
+                        Pattern::LFODMisc => self.universe.set_rle(x, y, include_str!("patterns/live_free_or_die/misc.rle")),
                     } 
                 }
 
@@ -217,8 +254,19 @@ impl Component for App {
             },
             Msg::SetPattern(pattern) => {
                 self.pattern = pattern;
-                false
-            }
+                true
+            },
+            Msg::SetRuleSet(rules) => {
+                match rules {
+                    RuleSet::Conway => self.universe.set_rules(vec!(3), vec!(2, 3)),
+                    RuleSet::LifeWithoutDeath => self.universe.set_rules(vec!(3), vec!(0, 1, 2, 3, 4, 5, 6, 7, 8)),
+                    RuleSet::DayAndNight => self.universe.set_rules(vec!(3,6,7,8), vec!(3,4,6,7,8)),
+                    RuleSet::LiveFreeOrDie => self.universe.set_rules(vec!(2), vec!(0)),
+                }
+                self.ruleset = rules;
+                self.pattern = Pattern::ToggleCell;
+                true
+            },
         }        
     }
     fn mounted(&mut self) -> ShouldRender {
@@ -259,29 +307,56 @@ impl Component for App {
             "Pause"
         };
 
-        let patterns = vec![
-            Pattern::ToggleCell, Pattern::Glider, Pattern:: Pulsar,
-            Pattern::Pentadecathlon, Pattern::LWSS, Pattern::MWSS, 
-            Pattern::HWSS, Pattern::GosperGliderGun, Pattern::RPentamino,
-            Pattern::Diehard, Pattern::Acorn, Pattern::Sawtooth1212,
-            Pattern::Homer, Pattern::DRHOscillators,
+
+        let patterns = match self.ruleset {
+            RuleSet::Conway => vec![
+                Pattern::ToggleCell, Pattern::Glider, Pattern:: Pulsar,
+                Pattern::Pentadecathlon, Pattern::LWSS, Pattern::MWSS, 
+                Pattern::HWSS, Pattern::GosperGliderGun, Pattern::RPentamino,
+                Pattern::Diehard, Pattern::Acorn, Pattern::Sawtooth1212,
+                Pattern::Homer, Pattern::DRHOscillators,
+            ],
+            RuleSet::LifeWithoutDeath => vec![
+                Pattern::ToggleCell, Pattern::C3Ladder, Pattern::C4Ladder,
+                Pattern::QuadraticGrowth,
+            ],
+            RuleSet::DayAndNight => vec![
+                Pattern::ToggleCell, Pattern::P200Oscillator,
+            ],
+            RuleSet::LiveFreeOrDie => vec![
+                Pattern::ToggleCell,
+                Pattern::LFODMisc,
+            ]
+        };
+
+        let rules = vec! [
+            RuleSet::Conway,
+            RuleSet::LifeWithoutDeath,
+            RuleSet::DayAndNight,
+            RuleSet::LiveFreeOrDie,
         ];
 
         html! {
-                <div> 
-                <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
-                <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
-                <button class="game-button" onclick=self.link.callback(|_| Msg::Randomize)>{ "Randomize" }</button>
-                <button class="game-button" onclick=self.link.callback(|_| Msg::Clear)>{ "Clear" }</button>
-                <Select<Pattern> selected=Pattern::ToggleCell options=patterns onchange=self.link.callback(|pattern| Msg::SetPattern(pattern))/>
-                <canvas 
-                    ref={self.node_ref.clone()} 
-                    onmousewheel=self.link.callback(|event| Msg::Zoom(event))
-                    onmousedown=self.link.callback(|event| Msg::ToggleOrStartMove(event))
-                    onmousemove=self.link.callback(|event| Msg::MaybeMove(event))
-                    onmouseup=self.link.callback(|event| Msg::ToggleOrEndMove(event))>
-                        { "This text is displayed if your browser does not support HTML5 Canvas." }
-                </canvas>
+                <div>
+                    <div>
+                    <h1> { "Conway's Game of Life" }</h1>
+                    <p> { "This is an implementation of Conway's game of life in Rust and webassembly. See the code " }<a href={ "https://github.com/jonstites/game_of_life" }>{ "here." }</a></p>
+                    </div>
+
+                    <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
+                    <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
+                    <button class="game-button" onclick=self.link.callback(|_| Msg::Randomize)>{ "Randomize" }</button>
+                    <button class="game-button" onclick=self.link.callback(|_| Msg::Clear)>{ "Clear" }</button>
+                    <Select<Pattern> selected=Pattern::ToggleCell options=patterns onchange=self.link.callback(|pattern| Msg::SetPattern(pattern))/>
+                    <Select<RuleSet> selected=RuleSet::Conway options=rules onchange=self.link.callback(|rules| Msg::SetRuleSet(rules))/>
+                    <canvas 
+                        ref={self.node_ref.clone()} 
+                        onmousewheel=self.link.callback(|event| Msg::Zoom(event))
+                        onmousedown=self.link.callback(|event| Msg::ToggleOrStartMove(event))
+                        onmousemove=self.link.callback(|event| Msg::MaybeMove(event))
+                        onmouseup=self.link.callback(|event| Msg::ToggleOrEndMove(event))>
+                            { "This text is displayed if your browser does not support HTML5 Canvas." }
+                    </canvas>
                 </div>
         }
     }
@@ -462,7 +537,7 @@ mod life {
         Birth,
         Death,
         Toggle,
-        Noop,        
+        Noop,
     }
 
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -518,25 +593,25 @@ mod life {
                 let ul_s = i & 0xeee0;
                 let ul_b = ul_s & !0x400;
                 
-                let lr = if (((lr_s & 0x20) != 0) && s.contains(&lr_b.count_ones())) || b.contains(&lr_b.count_ones()) {
+                let lr = if (((lr_s & 0x20) != 0) && s.contains(&lr_b.count_ones())) || (lr_s & 0x20) == 0 && b.contains(&lr_b.count_ones()) {
                     1
                 } else {
                     0
                 };
 
-                let ll = if (((ll_s & 0x40) != 0) && s.contains(&ll_b.count_ones())) || b.contains(&ll_b.count_ones()) {
+                let ll = if (((ll_s & 0x40) != 0) && s.contains(&ll_b.count_ones())) || (ll_s & 0x40) == 0 && b.contains(&ll_b.count_ones()) {
                     1
                 } else {
                     0
                 };
 
-                let ur = if (((ur_s & 0x200) != 0) && s.contains(&ur_b.count_ones())) || b.contains(&ur_b.count_ones()) {
+                let ur = if (((ur_s & 0x200) != 0) && s.contains(&ur_b.count_ones())) || (ur_s & 0x200) == 0 && b.contains(&ur_b.count_ones()) {
                     1
                 } else {
                     0
                 };
 
-                let ul = if (((ul_s & 0x400) != 0) && s.contains(&ul_b.count_ones())) || b.contains(&ul_b.count_ones()) {
+                let ul = if (((ul_s & 0x400) != 0) && s.contains(&ul_b.count_ones())) || (ul_s & 0x400) == 0 && b.contains(&ul_b.count_ones()) {
                     1
                 } else {
                     0
@@ -575,6 +650,26 @@ mod life {
 
             Universe {
                 p01, p10, active, generation, rule_table,
+            }
+        }
+
+        pub fn set_rules(&mut self, b: Vec<u32>, s: Vec<u32>) {
+            self.rule_table = RuleTable::new(b, s);
+
+            if self.generation % 2 == 0 {
+                for &coord in self.p01.keys() {
+                    self.active.insert(coord);
+                    self.active.insert(coord - TCoord(1, 1));
+                    self.active.insert(coord - TCoord(1, 0));
+                    self.active.insert(coord - TCoord(0, 1));
+                }
+            } else {
+                for &coord in self.p10.keys() {
+                    self.active.insert(coord);
+                    self.active.insert(coord + TCoord(1, 1));
+                    self.active.insert(coord + TCoord(1, 0));
+                    self.active.insert(coord + TCoord(0, 1));
+                }
             }
         }
 

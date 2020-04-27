@@ -1,0 +1,7 @@
+#N c/3 ladders
+#O Dean Hickerson
+#C Some uncommon c/3 ladders in Life without death.
+#C www.conwaylife.com/wiki/index.php?title=Life_without_death
+x = 14, y = 213, rule = b3/s012345678
+3bobo8b$b7o6b$b3ob3o6b$9o5b$b8o5b$bob3obo6b$6o8b$bobo10b$b3o10b$2ob3o
+8b$bob3o8b$b7o6b$8o6b$b3ob3o6b$b6o7b$3bo10b!
