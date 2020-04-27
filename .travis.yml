@@ -4,10 +4,6 @@ language:
 
 sudo: false
 
-cache: 
-  - cargo
-  - yarn
-
 before_install:
   - curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.22.4
   - export PATH="$HOME/.yarn/bin:$PATH"
