@@ -14,12 +14,13 @@ before_install:
   - export PATH="$HOME/.yarn/bin:$PATH"
 
 before_script:
+  - npm install -g npm@latest
   - yarn install
   - node --version
   - yarn global add wasm-pack  
   - wasm-pack --version
   - webpack --version
-  
+
 jobs:
   script:
     - cargo test
