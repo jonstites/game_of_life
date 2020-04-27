@@ -3,16 +3,56 @@ use wasm_bindgen::JsValue;
 use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
 use yew::services::{ConsoleService, IntervalService, RenderService, Task};
-use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender};
+use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender, components::Select};
 
 use std::time::Duration;
 
 extern crate js_sys;
 
 const MOVE_THRESHOLD: i32 = 3;
-const DEFAULT_CELL_SIZE: f32 = 30.0;
+const DEFAULT_CELL_SIZE: f32 = 10.0;
 const DEFAULT_ZOOM: f32 = -0.02;
 const RANDOMIZE_FRACTION: f64 = 0.20;
+const DEFAULT_TICK_TIME_MILLIS: u64 = 33;
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Pattern {
+    ToggleCell,
+    Glider,
+    Pulsar,
+    Pentadecathlon,
+    LWSS,
+    MWSS,
+    HWSS,
+    GosperGliderGun,
+    RPentamino,
+    Diehard,
+    Acorn,
+    Sawtooth1212,
+    Homer,
+    DRHOscillators,
+}
+
+impl ToString for Pattern {
+    fn to_string(&self) -> String {
+        match self {
+            Pattern::ToggleCell => "Toggle Cell".to_string(),
+            Pattern::Glider => "Glider".to_string(),
+            Pattern::Pulsar => "Pulsar".to_string(),
+            Pattern::Pentadecathlon => "Pentadecathlon".to_string(),
+            Pattern::LWSS => "Leightweight spaceship".to_string(),
+            Pattern::MWSS => "Middleweight spaceship".to_string(),
+            Pattern::HWSS => "Heavyweight spaceship".to_string(),
+            Pattern::GosperGliderGun => "Gosper glider gun".to_string(),
+            Pattern::RPentamino => "R-pentamino".to_string(),
+            Pattern::Diehard => "Diehard".to_string(),
+            Pattern::Acorn => "Acorn".to_string(),
+            Pattern::Sawtooth1212 => "Sawtooth 1212".to_string(),
+            Pattern::Homer => "Homer".to_string(),
+            Pattern::DRHOscillators => "Oscillator Collection".to_string(),
+        }
+    }
+}
 
 pub enum Msg {
     RenderGl,
@@ -25,6 +65,7 @@ pub enum Msg {
     ToggleOrEndMove(MouseEvent),
     Randomize,
     Clear,
+    SetPattern(Pattern),
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -47,6 +88,7 @@ pub struct App {
     cell_size: f32,
     move_start: Option<(i32, i32)>,
     is_moving: bool,
+    pattern: Pattern,
 }
 
 impl Component for App {
@@ -55,7 +97,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(1000 / 30), link.callback(|_| Msg::StepIfNotPaused));
+        let handle = interval.spawn(Duration::from_millis(DEFAULT_TICK_TIME_MILLIS), link.callback(|_| Msg::StepIfNotPaused));
 
         App {
             canvas: None,
@@ -77,6 +119,7 @@ impl Component for App {
             cell_size: DEFAULT_CELL_SIZE,
             move_start: None,
             is_moving: false,
+            pattern: Pattern::ToggleCell,
         }
     }
 
@@ -106,8 +149,7 @@ impl Component for App {
                 false
             },
             Msg::Zoom(event) => {
-                self.cell_size += event.delta_y() as f32 * DEFAULT_ZOOM * self.cell_size;
-                ConsoleService::new().log(&format!("cell size: {} delta y: {}", self.cell_size, event.delta_y()));
+                self.cell_size += event.delta_y() as f32 * DEFAULT_ZOOM * self.cell_size;                
                 false
             },
             Msg::ToggleOrStartMove(mouse_event) => {
@@ -135,8 +177,23 @@ impl Component for App {
                     let canvas_rect = self.canvas.as_ref().unwrap().get_bounding_client_rect();
                     let x = (((mouse_event.client_x() + self.x) as f32 - canvas_rect.left() as f32) / self.cell_size) as i64;
                     let y = (((mouse_event.client_y() + self.y) as f32 - canvas_rect.top() as f32) / self.cell_size) as i64;
-                    ConsoleService::new().log(&format!("x: {} y: {} client x: {} client y: {}", x, y, mouse_event.client_x(), mouse_event.client_y()));
-                    self.universe.toggle_cell(x, y);
+                    
+                    match self.pattern {
+                        Pattern::ToggleCell => self.universe.toggle_cell(x, y),
+                        Pattern::Glider => self.universe.set_rle(x, y, include_str!("patterns/glider.rle")),
+                        Pattern::Pulsar => self.universe.set_rle(x, y, include_str!("patterns/pulsar.rle")),
+                        Pattern::Pentadecathlon => self.universe.set_rle(x, y, include_str!("patterns/pentadecathlon.rle")),
+                        Pattern::LWSS => self.universe.set_rle(x, y, include_str!("patterns/lwss.rle")),
+                        Pattern::MWSS => self.universe.set_rle(x, y, include_str!("patterns/mwss.rle")),
+                        Pattern::HWSS => self.universe.set_rle(x, y, include_str!("patterns/hwss.rle")),
+                        Pattern::GosperGliderGun => self.universe.set_rle(x, y, include_str!("patterns/gosper_glider_gun.rle")),
+                        Pattern::RPentamino => self.universe.set_rle(x, y, include_str!("patterns/r_pentamino.rle")),
+                        Pattern::Diehard => self.universe.set_rle(x, y, include_str!("patterns/diehard.rle")),
+                        Pattern::Acorn => self.universe.set_rle(x, y, include_str!("patterns/acorn.rle")),
+                        Pattern::Sawtooth1212 => self.universe.set_rle(x, y, include_str!("patterns/sawtooth_1212.rle")),
+                        Pattern::Homer => self.universe.set_rle(x, y, include_str!("patterns/homer.rle")),
+                        Pattern::DRHOscillators => self.universe.set_rle(x, y, include_str!("patterns/DRH_oscillators.rle")),
+                    } 
                 }
 
                 self.is_moving = false;
@@ -156,6 +213,10 @@ impl Component for App {
             },
             Msg::Clear => {
                 self.universe.clear();
+                false
+            },
+            Msg::SetPattern(pattern) => {
+                self.pattern = pattern;
                 false
             }
         }        
@@ -189,6 +250,8 @@ impl Component for App {
         false
     }
 
+    fn change(&mut self, _: Self::Properties) -> bool {unimplemented!()}
+
     fn view(&self) -> Html {
         let play_or_pause = if self.paused {
             "Play"
@@ -196,12 +259,21 @@ impl Component for App {
             "Pause"
         };
 
+        let patterns = vec![
+            Pattern::ToggleCell, Pattern::Glider, Pattern:: Pulsar,
+            Pattern::Pentadecathlon, Pattern::LWSS, Pattern::MWSS, 
+            Pattern::HWSS, Pattern::GosperGliderGun, Pattern::RPentamino,
+            Pattern::Diehard, Pattern::Acorn, Pattern::Sawtooth1212,
+            Pattern::Homer, Pattern::DRHOscillators,
+        ];
+
         html! {
                 <div> 
                 <button class="game-button" onclick=self.link.callback(|_| Msg::PlayOrPause)>{ play_or_pause }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Step)>{ "Step" }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Randomize)>{ "Randomize" }</button>
                 <button class="game-button" onclick=self.link.callback(|_| Msg::Clear)>{ "Clear" }</button>
+                <Select<Pattern> selected=Pattern::ToggleCell options=patterns onchange=self.link.callback(|pattern| Msg::SetPattern(pattern))/>
                 <canvas 
                     ref={self.node_ref.clone()} 
                     onmousewheel=self.link.callback(|event| Msg::Zoom(event))
@@ -722,16 +794,63 @@ mod life {
             self.perform_cell_action(x, y, CellAction::Noop)
         }
 
-        pub fn set_cell(&mut self, mut x: i64, mut y: i64) {
+        pub fn set_cell(&mut self, x: i64, y: i64) {
             self.perform_cell_action(x, y, CellAction::Birth);
         }
 
-        pub fn kill_cell(&mut self, mut x: i64, mut y: i64) {
+        pub fn kill_cell(&mut self, x: i64, y: i64) {
             self.perform_cell_action(x, y, CellAction::Death);
         }
 
-        pub fn toggle_cell(&mut self, mut x: i64, mut y: i64) {
+        pub fn toggle_cell(&mut self, x: i64, y: i64) {
             self.perform_cell_action(x, y, CellAction::Toggle);
+        }
+
+        pub fn set_rle(&mut self, mut x: i64, mut y: i64, rle: &str) {
+
+            let start_x = x;
+
+            'rle_loop:
+            for line in rle.lines() {
+                if line.starts_with("#") || line.starts_with("x") {
+                    continue;
+                }
+
+                let mut repeat = None;
+                for c in line.chars() {
+                    match c {
+                        '!' => break 'rle_loop,
+                        'b' | 'B' => {
+                            for _i in 0..repeat.unwrap_or(1) {
+                                self.kill_cell(x, y);
+                                x += 1;
+                            }
+                            repeat = None;
+                        },
+                        '$' => {
+                            for _i in 0..repeat.unwrap_or(1) {
+                                y += 1;
+                            }
+                            x = start_x;
+                            repeat = None;
+                        },
+                        s if s.is_whitespace()  => (),
+                        d if d.is_digit(10) => {
+                            match repeat {
+                                None => repeat = Some(d.to_string().parse::<i32>().unwrap()),
+                                Some(d2) => repeat = Some(d.to_string().parse::<i32>().unwrap()+10*d2),
+                            }
+                        },
+                        _ => {
+                            for _i in 0..repeat.unwrap_or(1) {
+                                self.set_cell(x, y);
+                                x += 1;
+                            }
+                            repeat = None;
+                        }
+                    }
+                }                
+            }
         }
 
         pub fn live_cells(&self) -> Vec<(i64, i64)> {

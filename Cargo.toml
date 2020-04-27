@@ -40,3 +40,9 @@ opt-level = 3
 
 [profile.bench]
 opt-level = 3
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.profiling]
+wasm-opt = false
