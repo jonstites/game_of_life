@@ -16,6 +16,7 @@ before_script:
 
 jobs:
   script:
+    - yarn global add wasm-pack
     - wasm-pack --version
     - cargo test
     - yarn build
