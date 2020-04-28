@@ -5,7 +5,7 @@ language:
   - node_js
 
 before_install:
-  - sudo apt install npm
+  - sudo apt install nodejs
   - npm install -g npm@latest
   - yarn install
   - node --version
