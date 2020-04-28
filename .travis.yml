@@ -1,56 +1,32 @@
-language:
-  - rust
-  - node_js
+dist: bionic
 
-sudo: false
-
-cache: cargo
+language: rust
 
 before_install:
+  - curl -O https://nodejs.org/dist/v12.16.2/node-v12.16.2-linux-x64.tar.xz
+  - mkdir -p nodejs
+  - tar xvJf node-v12.16.2-linux-x64.tar.xz -C nodejs
+  - export PATH="nodejs/node-v12.16.2-linux-x64/bin:$PATH"
+  - node --version
   - npm install -g npm@latest
-  
-matrix:
-  include:
+  - yarn install
+  - node --version
+  - export PATH="$(readlink -f node_modules/.bin):$PATH"
+  - wasm-pack --version
+  - webpack --version
+  - curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.22.4
+  - export PATH="$HOME/.yarn/bin:$PATH"
 
-  # Builds with wasm-pack.
-  - rust: beta
-    env: RUST_BACKTRACE=1
-    addons:
-      firefox: latest
-      chrome: stable
-    before_script:
-      - (test -x $HOME/.cargo/bin/cargo-install-update || cargo install cargo-update)
-      - (test -x $HOME/.cargo/bin/cargo-generate || cargo install --vers "^0.2" cargo-generate)
-      - cargo install-update -a
-      - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh -s -- -f
-    script:
-      - cargo generate --branch $TRAVIS_BRANCH --git . --name testing
-      # Having a broken Cargo.toml (in that it has curlies in fields) anywhere
-      # in any of our parent dirs is problematic.
-      - mv Cargo.toml Cargo.toml.tmpl
-      - cd testing
-      - wasm-pack build
-      - wasm-pack test --chrome --firefox --headless
-
-before_deploy:
-  - wasm-pack build
-  - wasm-pack test --chrome --firefox --headless
-  - cd pkg
-  - npm link
-  - cd ../www
-  - npm install
-  - npm link game-of-life
-  - npm run build
-  - cd ..
+jobs:
+  script:
+    - cargo test
+    - yarn build
   
 deploy:
   provider: s3
-  edge:
-    source: jonstites/dpl
-    branch: feature/upgrade-mime-types-gem
   bucket: life.jonstites.com  
   skip_cleanup: true
-  local_dir: www/dist
+  local_dir: dist
   access_key_id: $AWS_ACCESS_KEY 
   secret_access_key: $AWS_SECRET_KEY
   region: $AWS_DEFAULT_REGION

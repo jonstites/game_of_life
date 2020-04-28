@@ -1,28 +1,48 @@
 [package]
-name = "game-of-life"
-version = "0.1.0"
+name = "conk"
+version = "0.2.0"
 authors = ["Jonathan Stites <mail@jonstites.com>"]
+edition = "2018"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [features]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-cfg-if = "0.1.2"
-wasm-bindgen = "0.2"
-js-sys = "0.3.17"
+js-sys = "0.3"
+yew = { version = "0.14.3", features = ["web_sys"] }
+wasm-bindgen = "0.2.60"
+web-sys = {version = "0.3.37", features = [
+    'CanvasRenderingContext2d',
+    'DomRect',
+    'Element',
+    'HtmlCanvasElement',
+    'HtmlElement',
+    'WebGlBuffer', 'WebGlProgram', 'WebGl2RenderingContext',
+    'WebGlShader', 'WebGlUniformLocation', 'WebGlContextAttributes'
+]}
+fnv = "1.0.6"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.1", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
 
 [dev-dependencies]
-wasm-bindgen-test = "0.2"
+wasm-bindgen-test = "0.3.10"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
-opt-level = "s"
+opt-level = 3
+
+[profile.bench]
+opt-level = 3
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.profiling]
+wasm-opt = false

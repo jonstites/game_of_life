@@ -1,0 +1,25 @@
+#C This is a period 200 oscillator which demonstrates the symmetry of the
+#C Day/Night rules, and how a signal can be sent across the border between
+#C day and night regions.  Here a period 200 anti-gun destroys every rocket
+#C from a normal period 200 rocket gun.  Based on a reaction by Dean Hickerson.
+#C David I. Bell, January 2000
+#C
+x = 122, y = 78, rule = B3678/S34678
+102booboboo$91boo9b7o9boo$91boo10b5o10boo$90b4o8b7o8b4o$90b3obo7b7o7bo
+b3o$89b4obo7b7o7bob4o$89b4obo8b5o8bob4o$89b4obo8b5o8bob4o$90b3obo7b7o
+7bob3o$90b3obo8b5o8bob3o$89b4obo7b7o7bob4o$89b4obo8b5o8bob4o$89b4obo7b
+7o7bob4o$90b3obo7b7o7bob3o$90b4o11bo11b4o$91boo25boo$91boo25boo$104bob
+o$103bobobo$103b5o$104b3o$104b3o$103b5o$104b3o$102bob3obo$102b7o$103b
+5o$103b5o$104b3o$104b3o$105bo$103bobobo$101boob3oboo$101b9o$102b7o$3bo
+bbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbobbo
+bbobbobbobbobbobbobbo7b9o$b95o5b9o$b95o6bob3obo$97o6b5o$b10o3boo3b78o
+7b3o$b8o12b75o9bo$7o5b6o5b73o$b6o16b74o$b8o3b6o3b75o$12o6b78o$b96o$b
+11o6b78o$96o$b96o$b62obb31o$63ob32o$b57obb3ob3ob29o$b5obbo3boobobobb5o
+4boob15obb9o8bobb27o$6o14b4o4b4ob12o6bobb3obo11b26o$b6o13b3obo9b11o11b
+oo13b26o$6o15b3obo9b11o26b25o$b6o13b3obo9b11o11boo13b25o$6o14b4o4b4ob
+12o6bobb3obo11b26o$b5obbo3boobobobb5o4boob15obb9o8bobb26o$b57obb3ob3ob
+27o$63ob30o$b62obb29o$b92o$62ob30o$b11o6b68obb4o$b59ob3ob16obbo4b4o$
+12o6b40o4bo4b14o6b4o$b8o3b6o3b37o4bo4b13o7b4o$b6o16b37obbobb15o3boob4o
+$7o5b6o5b56o4boob4o$b8o12b58o8boo$b10o3boo3b58o4b4ob3o$77o4booboo3boo$
+b74o11boobb3o$b74o11boob4o$3bobbobbobbobbobbobbobbobbobbobbobbobbobbo
+bbobbobbobbobbobbobbobbobbobbo14boboo$86boo$86boo!
