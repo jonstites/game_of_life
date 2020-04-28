@@ -11,7 +11,7 @@ before_install:
   - npm install -g npm@latest
   - yarn install
   - node --version
-  - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh 
+  - export PATH="$(readlink -f node_modules/.bin):$PATH"
   - wasm-pack --version
   - webpack --version
   - curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.22.4
