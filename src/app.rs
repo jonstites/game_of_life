@@ -511,7 +511,7 @@ impl App {
             let cell_y1 = cell.1 as f32 * cell_size;
             let cell_x2 = cell_x1 + cell_size;
             let cell_y2 = cell_y1 + cell_size;
-            if (cell_x1 > x1 as f32 || cell_x2 < x2 as f32) && (cell_y1 > y1 as f32 || cell_y2 < y2 as f32) {
+            if cell_x2 > x1 as f32 && cell_x1 < x2 as f32 && cell_y2 > y1 as f32 && cell_y1 < y2 as f32 {
                 let cell_x1 = cell_x1 as f32 - x1 as f32;
                 let cell_x2 = cell_x2 as f32 - x1 as f32;
                 let cell_y1 = cell_y1 as f32 - y1 as f32;
