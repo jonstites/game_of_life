@@ -4,8 +4,11 @@ language:
   - rust
   - node_js
 
+node_js:
+  - lts
+
 before_install:
-  - sudo apt install nodejs
+  - node --version
   - npm install -g npm@latest
   - yarn install
   - node --version
