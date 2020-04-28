@@ -4,9 +4,8 @@ language:
   - rust
   - node_js
 
-sudo: false
-
 before_install:
+  - sudo apt install npm
   - npm install -g npm@latest
   - yarn install
   - node --version
