@@ -35,7 +35,6 @@ deploy:
   on:
     branch:
       - master
-      - feature/bit_and_growable_hash
     
 notifications:
   email:
