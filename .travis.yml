@@ -4,6 +4,7 @@ language: rust
 
 before_install:
   - curl -O https://nodejs.org/dist/v12.16.2/node-v12.16.2-linux-x64.tar.xz
+  - sudo mkdir -p /usr/local/lib/nodejs
   - sudo tar xvJf node-v12.16.2-linux-x64.tar.xz -C /usr/local/lib/nodejs
   - node --version
   - npm install -g npm@latest
