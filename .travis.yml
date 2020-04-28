@@ -1,13 +1,10 @@
 dist: bionic
 
-language:
-  - rust
-  - node_js
-
-node_js:
-  - lts
+language: rust
 
 before_install:
+  - curl -O https://nodejs.org/dist/v12.16.2/node-v12.16.2-linux-x64.tar.xz
+  - sudo tar xvjf node-v12.16.2-linux-x64.tar.xz -C /usr/local/lib/nodejs
   - node --version
   - npm install -g npm@latest
   - yarn install
