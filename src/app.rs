@@ -564,6 +564,7 @@ mod life {
         pub p01: TMap,
         pub p10: TMap,
         active: TSet,
+        next_active: TSet,
         pub generation: u64,
         rule_table: RuleTable,
     }
@@ -652,11 +653,12 @@ mod life {
             let p01 = TMap::default();
             let p10 = TMap::default();
             let active = TSet::default();
+            let next_active = TSet::default();
             let generation = 0;
             let rule_table = RuleTable::new(b, s);
 
             Universe {
-                p01, p10, active, generation, rule_table,
+                p01, p10, active, next_active, generation, rule_table,
             }
         }
 
@@ -689,71 +691,64 @@ mod life {
         pub fn step(&mut self) {
             let is_even = self.generation % 2 == 0;
             if is_even {
-                let (active, p10) = self.p01_step(&self.active, &self.p01);
-                self.active = active;
-                self.p10 = p10;
+                self.p01_step();
             } else {
-                let (active, p01) = self.p10_step(&self.active, &self.p10);
-                self.active = active;
-                self.p01 = p01;
+                self.p10_step();
             }
 
             self.generation += 1;
         }
 
-        fn p01_step(&self, active: &TSet, tiles: &TMap) -> (TSet, TMap) {
-            let mut next_active = TSet::default();
-            let mut next_gen = TMap::default();
+        fn p01_step(&mut self) {
 
-            for coord in active {
+            self.next_active.clear();
+            for coord in &self.active {
                 let right_coord = *coord + TCoord(1, 0);
                 let down_coord = *coord + TCoord(0, 1);
                 let downright_coord = *coord + TCoord(1, 1);
 
-                let tile = tiles.get(coord).cloned().unwrap_or(Tile(0));
-                let right = tiles.get(&right_coord).cloned().unwrap_or(Tile(0));
-                let down = tiles.get(&down_coord).cloned().unwrap_or(Tile(0));
-                let downright = tiles.get(&downright_coord).cloned().unwrap_or(Tile(0));
+                let tile = self.p01.get(coord).cloned().unwrap_or(Tile(0));
+                let right = self.p01.get(&right_coord).cloned().unwrap_or(Tile(0));
+                let down = self.p01.get(&down_coord).cloned().unwrap_or(Tile(0));
+                let downright = self.p01.get(&downright_coord).cloned().unwrap_or(Tile(0));
 
                 let new_tile = self.p01_calc(tile, right, down, downright);
-                next_gen.insert(*coord, new_tile);
+                self.p10.insert(*coord, new_tile);
 
                 if tile != new_tile {
-                    next_active.insert(*coord);
-                    next_active.insert(right_coord);
-                    next_active.insert(down_coord);
-                    next_active.insert(downright_coord);
+                    self.next_active.insert(*coord);
+                    self.next_active.insert(right_coord);
+                    self.next_active.insert(down_coord);
+                    self.next_active.insert(downright_coord);
                 }
                 
             }
-            (next_active, next_gen)
+            std::mem::swap(&mut self.next_active, &mut self.active);
         }
 
-        fn p10_step(&self, active: &TSet, tiles: &TMap) -> (TSet, TMap) {
-            let mut next_active = TSet::default();
-            let mut next_gen = TMap::default();
-
-            for coord in active {
+        fn p10_step(&mut self) {
+            self.next_active.clear();
+            for coord in &self.active {
                 let left_coord = *coord - TCoord(1, 0);
                 let up_coord = *coord - TCoord(0, 1);
                 let upleft_coord = *coord - TCoord(1, 1);
 
-                let tile = tiles.get(coord).cloned().unwrap_or(Tile(0));
-                let left = tiles.get(&left_coord).cloned().unwrap_or(Tile(0));
-                let up = tiles.get(&up_coord).cloned().unwrap_or(Tile(0));
-                let upleft = tiles.get(&upleft_coord).cloned().unwrap_or(Tile(0));
+                let tile = self.p10.get(coord).cloned().unwrap_or(Tile(0));
+                let left = self.p10.get(&left_coord).cloned().unwrap_or(Tile(0));
+                let up = self.p10.get(&up_coord).cloned().unwrap_or(Tile(0));
+                let upleft = self.p10.get(&upleft_coord).cloned().unwrap_or(Tile(0));
 
                 let new_tile = self.p10_calc(tile, left, up, upleft);
-                next_gen.insert(*coord, new_tile);
+                self.p01.insert(*coord, new_tile);
                 if tile != new_tile {
-                    next_active.insert(*coord);
-                    next_active.insert(left_coord);
-                    next_active.insert(up_coord);
-                    next_active.insert(upleft_coord);
+                    self.next_active.insert(*coord);
+                    self.next_active.insert(left_coord);
+                    self.next_active.insert(up_coord);
+                    self.next_active.insert(upleft_coord);
                 }
                 
             }
-            (next_active, next_gen)
+            std::mem::swap(&mut self.next_active, &mut self.active);
         }
 
         fn p01_calc(&self, tile: Tile, right: Tile, down: Tile, downright: Tile) -> Tile {
