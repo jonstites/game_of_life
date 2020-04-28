@@ -10,16 +10,14 @@ node_js:
 sudo: false
 
 before_install:
-  - curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.22.4
-  - export PATH="$HOME/.yarn/bin:$PATH"
-
-before_script:
   - npm install -g npm@latest
   - yarn install
   - node --version
   - yarn global add wasm-pack  
   - wasm-pack --version
   - webpack --version
+  - curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.22.4
+  - export PATH="$HOME/.yarn/bin:$PATH"
 
 jobs:
   script:
