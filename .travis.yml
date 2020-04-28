@@ -4,9 +4,9 @@ language: rust
 
 before_install:
   - curl -O https://nodejs.org/dist/v12.16.2/node-v12.16.2-linux-x64.tar.xz
-  - sudo mkdir -p /usr/local/lib/nodejs
-  - sudo tar xvJf node-v12.16.2-linux-x64.tar.xz -C /usr/local/lib/nodejs
-  - export PATH="/usr/local/lib/nodejs/node-v12.16.2-linux-x64/bin:$PATH"
+  - sudo mkdir -p nodejs
+  - sudo tar xvJf node-v12.16.2-linux-x64.tar.xz -C nodejs
+  - export PATH="nodejs/node-v12.16.2-linux-x64/bin:$PATH"
   - node --version
   - npm install -g npm@latest
   - yarn install
