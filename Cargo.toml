@@ -20,6 +20,9 @@ web-sys = {version = "0.3.37", features = [
     'Element',
     'HtmlCanvasElement',
     'HtmlElement',
+    'TouchEvent',
+    'TouchList',
+    'Touch',
     'WebGlBuffer', 'WebGlProgram', 'WebGl2RenderingContext',
     'WebGlShader', 'WebGlUniformLocation', 'WebGlContextAttributes'
 ]}
