@@ -2,7 +2,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
-use yew::services::{IntervalService, RenderService, Task};
+use yew::services::{ConsoleService, IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender, components::Select};
 
 use std::time::Duration;
@@ -42,24 +42,24 @@ impl ToString for Pattern {
     fn to_string(&self) -> String {
         match self {
             Pattern::ToggleCell => "Toggle Cell".to_string(),
-            Pattern::Glider => "Glider".to_string(),
-            Pattern::Pulsar => "Pulsar".to_string(),
-            Pattern::Pentadecathlon => "Pentadecathlon".to_string(),
-            Pattern::LWSS => "Leightweight spaceship".to_string(),
-            Pattern::MWSS => "Middleweight spaceship".to_string(),
-            Pattern::HWSS => "Heavyweight spaceship".to_string(),
-            Pattern::GosperGliderGun => "Gosper glider gun".to_string(),
-            Pattern::RPentamino => "R-pentamino".to_string(),
-            Pattern::Diehard => "Diehard".to_string(),
-            Pattern::Acorn => "Acorn".to_string(),
-            Pattern::Sawtooth1212 => "Sawtooth 1212".to_string(),
-            Pattern::Homer => "Homer".to_string(),
-            Pattern::DRHOscillators => "Oscillator collection".to_string(),
-            Pattern::C3Ladder => "c/3 ladder".to_string(),
-            Pattern::C4Ladder => "c/4 ladder".to_string(),
-            Pattern::QuadraticGrowth => "Quadratic growth".to_string(),
-            Pattern::P200Oscillator => "p200 oscillator".to_string(),
-            Pattern::LFODMisc => "Miscellaneous".to_string(),
+            Pattern::Glider => "Glider (Conway)".to_string(),
+            Pattern::Pulsar => "Pulsar (Conway)".to_string(),
+            Pattern::Pentadecathlon => "Pentadecathlon (Conway)".to_string(),
+            Pattern::LWSS => "Leightweight spaceship (Conway)".to_string(),
+            Pattern::MWSS => "Middleweight spaceship (Conway)".to_string(),
+            Pattern::HWSS => "Heavyweight spaceship (Conway)".to_string(),
+            Pattern::GosperGliderGun => "Gosper glider gun (Conway)".to_string(),
+            Pattern::RPentamino => "R-pentamino (Conway)".to_string(),
+            Pattern::Diehard => "Diehard (Conway)".to_string(),
+            Pattern::Acorn => "Acorn (Conway)".to_string(),
+            Pattern::Sawtooth1212 => "Sawtooth 1212 (Conway)".to_string(),
+            Pattern::Homer => "Homer (Conway)".to_string(),
+            Pattern::DRHOscillators => "Oscillator collection (Conway)".to_string(),
+            Pattern::C3Ladder => "c/3 ladder (Life Without Death)".to_string(),
+            Pattern::C4Ladder => "c/4 ladder (Life Without Death)".to_string(),
+            Pattern::QuadraticGrowth => "Quadratic growth (Life Without Death)".to_string(),
+            Pattern::P200Oscillator => "p200 oscillator (Day & Night)".to_string(),
+            Pattern::LFODMisc => "Miscellaneous (Live Free or Die)".to_string(),
         }
     }
 }
@@ -76,9 +76,9 @@ impl ToString for RuleSet {
     fn to_string(&self) -> String {
         match self {
             RuleSet::Conway => "Conway - B3/S23".to_string(),
-            RuleSet::LifeWithoutDeath => "Life without death - B3/S012345678".to_string(),
+            RuleSet::LifeWithoutDeath => "Life Without Death - B3/S012345678".to_string(),
             RuleSet::DayAndNight => "Day & Night - B3678/S34678".to_string(),
-            RuleSet::LiveFreeOrDie => "Live Free Or Die - B2/S0".to_string(),
+            RuleSet::LiveFreeOrDie => "Live Free or Die - B2/S0".to_string(),
         }
     }
 }
@@ -112,8 +112,8 @@ pub struct App {
     position_buffer: Option<WebGlBuffer>,
     resolution_uniform_location: Option<WebGlUniformLocation>,
     color_uniform_location: Option<WebGlUniformLocation>,
-    x: i32,
-    y: i32,
+    x: f32,
+    y: f32,
     paused: bool,
     cell_size: f32,
     move_start: Option<(i32, i32)>,
@@ -144,8 +144,8 @@ impl Component for App {
             position_buffer: None,
             resolution_uniform_location: None,
             color_uniform_location: None,
-            x: 0,
-            y: 0,
+            x: 0.0,
+            y: 0.0,
             paused: true,
             cell_size: DEFAULT_CELL_SIZE,
             move_start: None,
@@ -181,7 +181,17 @@ impl Component for App {
                 false
             },
             Msg::Zoom(event) => {
-                self.cell_size += event.delta_y() as f32 * DEFAULT_ZOOM * self.cell_size;                
+                let canvas = self.canvas.as_ref().unwrap();
+                let width = canvas.client_width() as f32;
+                let height = canvas.client_height() as f32;
+
+                let midpoint_x = (self.x + width / 2.0) / self.cell_size;
+                let midpoint_y = (self.y + height / 2.0) / self.cell_size;
+
+                self.cell_size += event.delta_y() as f32 * DEFAULT_ZOOM * self.cell_size;
+
+                self.x = midpoint_x * self.cell_size - width / 2.0;
+                self.y = midpoint_y * self.cell_size - height / 2.0;
                 false
             },
             Msg::ToggleOrStartMove(mouse_event) => {
@@ -196,8 +206,8 @@ impl Component for App {
                     }
 
                     if self.is_moving {
-                        self.x -= mouse_event.client_x() - start_x;
-                        self.y -= mouse_event.client_y() - start_y;
+                        self.x -= (mouse_event.client_x() - start_x) as f32;
+                        self.y -= (mouse_event.client_y() - start_y) as f32;
                         self.move_start = Some((mouse_event.client_x(), mouse_event.client_y()));
                     }
                 }
@@ -207,8 +217,8 @@ impl Component for App {
 
                 if !self.is_moving {
                     let canvas_rect = self.canvas.as_ref().unwrap().get_bounding_client_rect();
-                    let mut x = (((mouse_event.client_x() + self.x) as f32 - canvas_rect.left() as f32) / self.cell_size) as i64;
-                    let mut y = (((mouse_event.client_y() + self.y) as f32 - canvas_rect.top() as f32) / self.cell_size) as i64;
+                    let mut x = (((mouse_event.client_x() as f32 + self.x) as f32 - canvas_rect.left() as f32) / self.cell_size) as i64;
+                    let mut y = (((mouse_event.client_y() as f32 + self.y) as f32 - canvas_rect.top() as f32) / self.cell_size) as i64;
 
                     if x < 0 {
                         x -= 1;
@@ -271,7 +281,6 @@ impl Component for App {
                     RuleSet::LiveFreeOrDie => self.universe.set_rules(vec!(2), vec!(0)),
                 }
                 self.ruleset = rules;
-                self.pattern = Pattern::ToggleCell;
                 true
             },
         }        
@@ -315,26 +324,17 @@ impl Component for App {
         };
 
 
-        let patterns = match self.ruleset {
-            RuleSet::Conway => vec![
+        let patterns = vec![
                 Pattern::ToggleCell, Pattern::Glider, Pattern:: Pulsar,
                 Pattern::Pentadecathlon, Pattern::LWSS, Pattern::MWSS, 
                 Pattern::HWSS, Pattern::GosperGliderGun, Pattern::RPentamino,
                 Pattern::Diehard, Pattern::Acorn, Pattern::Sawtooth1212,
                 Pattern::Homer, Pattern::DRHOscillators,
-            ],
-            RuleSet::LifeWithoutDeath => vec![
-                Pattern::ToggleCell, Pattern::C3Ladder, Pattern::C4Ladder,
+                Pattern::C3Ladder, Pattern::C4Ladder,
                 Pattern::QuadraticGrowth,
-            ],
-            RuleSet::DayAndNight => vec![
-                Pattern::ToggleCell, Pattern::P200Oscillator,
-            ],
-            RuleSet::LiveFreeOrDie => vec![
-                Pattern::ToggleCell,
+                Pattern::P200Oscillator,
                 Pattern::LFODMisc,
-            ]
-        };
+            ];
 
         let rules = vec! [
             RuleSet::Conway,
@@ -459,7 +459,7 @@ impl App {
         // set the color
         gl.uniform4f (self.color_uniform_location.as_ref(), 0.0, 1.0, 0.0, 1.0);
 
-        let vertices: Vec<f32> = self.collect_cells(self.x, self.y, self.x + canvas.width() as i32, self.y + canvas.height() as i32);
+        let vertices: Vec<f32> = self.collect_cells(self.x, self.y, self.x + canvas.width() as f32, self.y + canvas.height() as f32);
 
         // Creating a new Float32Array leads to painfully noticeable Garbage Collection
         // So instead, let's reuse the same array as much as possible.
@@ -502,7 +502,7 @@ impl App {
         }
     }
 
-    fn collect_cells(&self, x1: i32, y1: i32, x2: i32, y2: i32) -> Vec<f32> {
+    fn collect_cells(&self, x1: f32, y1: f32, x2: f32, y2: f32) -> Vec<f32> {
         
         let mut vertices = Vec::new();
         let cell_size = self.cell_size;
