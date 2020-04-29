@@ -4,6 +4,7 @@ use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent, WebGlBuffer, WebGlShade
 use web_sys::WebGl2RenderingContext as GL;
 use yew::services::{ConsoleService, IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender, components::Select};
+use yew::html::ChangeData;
 
 use std::time::Duration;
 
@@ -11,9 +12,9 @@ extern crate js_sys;
 
 const MOVE_THRESHOLD: i32 = 3;
 const DEFAULT_CELL_SIZE: f32 = 10.0;
-const DEFAULT_ZOOM: f32 = -0.02;
+const DEFAULT_ZOOM: f32 = -0.002;
 const RANDOMIZE_FRACTION: f64 = 0.20;
-const DEFAULT_TICK_TIME_MILLIS: u64 = 33;
+const DEFAULT_FRAMES_PER_SECOND: u64 = 60;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Pattern {
@@ -96,6 +97,7 @@ pub enum Msg {
     Clear,
     SetPattern(Pattern),
     SetRuleSet(RuleSet),
+    ChangeSpeed(ChangeData),
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -128,7 +130,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut interval = IntervalService::new();
-        let handle = interval.spawn(Duration::from_millis(DEFAULT_TICK_TIME_MILLIS), link.callback(|_| Msg::StepIfNotPaused));
+        let handle = interval.spawn(Duration::from_millis(1000 / DEFAULT_FRAMES_PER_SECOND), link.callback(|_| Msg::StepIfNotPaused));
 
         App {
             canvas: None,
@@ -167,7 +169,6 @@ impl Component for App {
             },
             Msg::Step => {
                 self.universe.step();
-                //self.universe.step();
                 false
             },
             Msg::PlayOrPause => {
@@ -283,6 +284,18 @@ impl Component for App {
                 self.ruleset = rules;
                 true
             },
+            Msg::ChangeSpeed(speed) => {
+                let mut interval = IntervalService::new();
+                match speed {
+                    ChangeData::Value(s) => {
+                        let handle = interval.spawn(Duration::from_millis(1000 / s.parse::<u64>().unwrap()), self.link.callback(|_| Msg::StepIfNotPaused));
+                        self.timer = Box::new(handle);
+                    }
+                    _ => panic!("unexpected speed"),
+                }
+
+                false
+            }
         }        
     }
     fn mounted(&mut self) -> ShouldRender {
@@ -313,8 +326,6 @@ impl Component for App {
         // render the DOM element(s) again.
         false
     }
-
-    fn change(&mut self, _: Self::Properties) -> bool {unimplemented!()}
 
     fn view(&self) -> Html {
         let play_or_pause = if self.paused {
@@ -356,6 +367,8 @@ impl Component for App {
                     <button class="game-button" onclick=self.link.callback(|_| Msg::Clear)>{ "Clear" }</button>
                     <Select<Pattern> selected=Pattern::ToggleCell options=patterns onchange=self.link.callback(|pattern| Msg::SetPattern(pattern))/>
                     <Select<RuleSet> selected=RuleSet::Conway options=rules onchange=self.link.callback(|rules| Msg::SetRuleSet(rules))/>
+                    { "Speed: "}
+                    <input class="slider" type="range" min=1 max=60 value=DEFAULT_FRAMES_PER_SECOND onchange=self.link.callback(|event| Msg::ChangeSpeed(event))>{ "Speed" }</input>
                     <canvas 
                         ref={self.node_ref.clone()} 
                         onmousewheel=self.link.callback(|event| Msg::Zoom(event))
@@ -480,7 +493,9 @@ impl App {
         let offset = 0;
         let count = self.vertices.length() as i32 / 2;
 
-        gl.draw_arrays(primitive_type, offset, count as i32);
+        if count > 0 {
+            gl.draw_arrays(primitive_type, offset, count as i32);
+        }
         let render_frame = self.link.callback(|_| Msg::RenderGl);
         let handle = RenderService::new().request_animation_frame(render_frame);
         // A reference to the new handle must be retained for the next render to run.
