@@ -5,22 +5,25 @@ An implementation of [Conway's Game of Life](https://en.wikipedia.org/wiki/Conwa
 ## Features
 
 Move around and zoom in and out:
-(gif here)
+
+![Move and zoom](https://raw.github.com/jonstites/game_of_life/master/.docs/move_and_zoom.gif?sanitize=true)
+
 
 Randomize a region:
-(gif here)
 
-Slow or fast (runs at 30fps on a map with N cells on my desktop)
-(gif here)
+![Randomize](https://raw.github.com/jonstites/game_of_life/docs/.master/randomize.gif?sanitize=true)
 
-Click to add some default interesting patterns, or paste your own:
-(gif here)
+Slow or fast:
 
-Load or export a pattern:
-(gif here)
+![Control speed](https://raw.github.com/jonstites/game_of_life/master/.docs/speed.gif?sanitize=true)
 
-You can also use some other interesting outer-totalistic rulesets:
-(gif here)
+Choose among some hand-picked interesting patterns:
+
+![Choose patterns](https://raw.github.com/jonstites/game_of_life/master/.docs/choose_patterns.gif?sanitize=true)
+
+You can also use some other fun outer-totalistic rulesets:
+
+![Rulesets](https://raw.github.com/jonstites/game_of_life/docs/.master/rulesets.gif?sanitize=true)
 
 ## Design
 
