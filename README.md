@@ -5,7 +5,10 @@ An implementation of [Conway's Game of Life](https://en.wikipedia.org/wiki/Conwa
 ## Features
 
 Move around and zoom in and out:
-(gif here)
+
+![Move and zoom](https://raw.github.com/jonstites/game_of_life/docs/.docs/move_and_zoom.gif?sanitize=true)
+
+![alt text](.docs/move_and_zoom.gif)
 
 Randomize a region:
 (gif here)
