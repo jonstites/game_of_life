@@ -1,6 +1,6 @@
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use web_sys::{HtmlCanvasElement, MouseEvent, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
+use web_sys::{HtmlCanvasElement, MouseEvent, TouchEvent, TouchList, WheelEvent, WebGlBuffer, WebGlShader, WebGlProgram,WebGlUniformLocation};
 use web_sys::WebGl2RenderingContext as GL;
 use yew::services::{ConsoleService, IntervalService, RenderService, Task};
 use yew::{html, Component, ComponentLink, Html, NodeRef, ShouldRender, components::Select};
@@ -12,7 +12,7 @@ extern crate js_sys;
 
 const MOVE_THRESHOLD: i32 = 3;
 const DEFAULT_CELL_SIZE: f32 = 10.0;
-const DEFAULT_ZOOM: f32 = -0.002;
+const DEFAULT_ZOOM: f32 = -0.02;
 const RANDOMIZE_FRACTION: f64 = 0.20;
 const DEFAULT_FRAMES_PER_SECOND: u64 = 60;
 
@@ -98,6 +98,9 @@ pub enum Msg {
     SetPattern(Pattern),
     SetRuleSet(RuleSet),
     ChangeSpeed(ChangeData),
+    ZoomOrMove(TouchEvent),
+    StartZoomOrMove(TouchEvent),
+    EndZoomOrMove(TouchEvent),
 }
 pub struct App {
     canvas: Option<HtmlCanvasElement>,
@@ -122,6 +125,7 @@ pub struct App {
     is_moving: bool,
     pattern: Pattern,
     ruleset: RuleSet,
+    touches: Option<TouchList>,
 }
 
 impl Component for App {
@@ -154,6 +158,7 @@ impl Component for App {
             is_moving: false,
             pattern: Pattern::ToggleCell,
             ruleset: RuleSet::Conway,
+            touches: None,
         }
     }
 
@@ -189,7 +194,7 @@ impl Component for App {
                 let midpoint_x = (self.x + width / 2.0) / self.cell_size;
                 let midpoint_y = (self.y + height / 2.0) / self.cell_size;
 
-                self.cell_size += event.delta_y() as f32 * DEFAULT_ZOOM * self.cell_size;
+                self.cell_size += event.delta_y().min(5.0).max(-5.0) as f32 * DEFAULT_ZOOM * self.cell_size;
 
                 self.x = midpoint_x * self.cell_size - width / 2.0;
                 self.y = midpoint_y * self.cell_size - height / 2.0;
@@ -261,6 +266,8 @@ impl Component for App {
                     for y in (self.y as f32 / self.cell_size) as i32..=((self.y as f32 + self.canvas.as_ref().unwrap().height() as f32) / self.cell_size) as i32 {
                         if js_sys::Math::random() < RANDOMIZE_FRACTION {
                             self.universe.set_cell(x as i64, y as i64);
+                        } else {
+                            self.universe.kill_cell(x as i64, y as i64);
                         }
                     }
                 }
@@ -295,7 +302,53 @@ impl Component for App {
                 }
 
                 false
-            }
+            },
+            Msg::ZoomOrMove(event) => {
+                if self.touches.is_none() {
+                } else if event.touches().length() != self.touches.as_ref().unwrap().length() {
+                    self.touches = None;
+                } else if event.touches().length() == 1 {
+                    let touch = event.touches().item(0).unwrap();
+                    let previous = self.touches.as_ref().unwrap().item(0).unwrap();
+
+                    self.x += touch.client_x() as f32 - previous.client_x() as f32;
+                    self.y += touch.client_y() as f32 - previous.client_y() as f32;
+                    self.touches = Some(event.touches());
+                } else if event.touches().length() == 2 {
+                    let touch_0 = event.touches().item(0).unwrap();
+                    let previous_0 = self.touches.as_ref().unwrap().item(0).unwrap();
+
+                    let touch_1 = event.touches().item(1).unwrap();
+                    let previous_1 = self.touches.as_ref().unwrap().item(1).unwrap();
+
+                    let hypot = (touch_0.client_x() as f32 - touch_1.client_x() as f32).hypot(touch_0.client_y() as f32 - touch_1.client_y() as f32);
+                    let previous_hypot = (previous_0.client_x() as f32 - previous_1.client_x() as f32).hypot(previous_0.client_y() as f32 - previous_1.client_y() as f32);
+
+                    let delta_y = previous_hypot - hypot;
+
+                    let canvas = self.canvas.as_ref().unwrap();
+                    let width = canvas.client_width() as f32;
+                    let height = canvas.client_height() as f32;
+    
+                    let midpoint_x = (self.x + width / 2.0) / self.cell_size;
+                    let midpoint_y = (self.y + height / 2.0) / self.cell_size;
+    
+                    self.cell_size += delta_y.min(5.0).max(-5.0) as f32 * DEFAULT_ZOOM * self.cell_size;
+    
+                    self.x = midpoint_x * self.cell_size - width / 2.0;
+                    self.y = midpoint_y * self.cell_size - height / 2.0;
+                    self.touches = Some(event.touches());
+                }
+                false
+            },
+            Msg::StartZoomOrMove(event) => {
+                self.touches = Some(event.touches());
+                false
+            },
+            Msg::EndZoomOrMove(_event) => {
+                self.touches = None;
+                false
+            },
         }        
     }
     fn mounted(&mut self) -> ShouldRender {
@@ -371,6 +424,9 @@ impl Component for App {
                     <input class="slider" type="range" min=1 max=60 value=DEFAULT_FRAMES_PER_SECOND onchange=self.link.callback(|event| Msg::ChangeSpeed(event))>{ "Speed" }</input>
                     <canvas 
                         ref={self.node_ref.clone()} 
+                        ontouchstart=self.link.callback(|event| Msg::StartZoomOrMove(event))
+                        ontouchmove=self.link.callback(|event| Msg::ZoomOrMove(event))
+                        ontouchend=self.link.callback(|event| Msg::EndZoomOrMove(event))
                         onmousewheel=self.link.callback(|event| Msg::Zoom(event))
                         onmousedown=self.link.callback(|event| Msg::ToggleOrStartMove(event))
                         onmousemove=self.link.callback(|event| Msg::MaybeMove(event))
