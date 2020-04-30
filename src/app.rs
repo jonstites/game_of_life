@@ -37,6 +37,8 @@ pub enum Pattern {
     QuadraticGrowth,
     P200Oscillator,
     LFODMisc,
+    SeedsMisc,
+    SimpleReplicator,
 }
 
 impl ToString for Pattern {
@@ -61,6 +63,8 @@ impl ToString for Pattern {
             Pattern::QuadraticGrowth => "Quadratic growth (Life Without Death)".to_string(),
             Pattern::P200Oscillator => "p200 oscillator (Day & Night)".to_string(),
             Pattern::LFODMisc => "Miscellaneous (Live Free or Die)".to_string(),
+            Pattern::SeedsMisc => "Miscellaneous (Seeds)".to_string(),
+            Pattern::SimpleReplicator => "Simple Replicator (HighLife)".to_string(),
         }
     }
 }
@@ -71,6 +75,14 @@ pub enum RuleSet {
     Conway,
     DayAndNight,
     LiveFreeOrDie,
+    Replicator,
+    Replicator2,
+    Seeds,
+    Maze,
+    EightLife,
+    LongLife,
+    HighLife,
+    DryLife,
 }
 
 impl ToString for RuleSet {
@@ -80,6 +92,14 @@ impl ToString for RuleSet {
             RuleSet::LifeWithoutDeath => "Life Without Death - B3/S012345678".to_string(),
             RuleSet::DayAndNight => "Day & Night - B3678/S34678".to_string(),
             RuleSet::LiveFreeOrDie => "Live Free or Die - B2/S0".to_string(),
+            RuleSet::Replicator => "Replicator - B1357/S1357".to_string(),
+            RuleSet::Replicator2 => "Replicator 2 - B1357/S02468".to_string(),
+            RuleSet::Seeds => "Seeds - B2/S".to_string(),
+            RuleSet::Maze => "Maze - B3/S12345".to_string(),
+            RuleSet::EightLife => "EightLife - B3/S238".to_string(),
+            RuleSet::LongLife => "Long Life - B345/S5".to_string(),
+            RuleSet::HighLife => "HighLife - B36/S23".to_string(),
+            RuleSet::DryLife => "DryLife - B37/S23".to_string(),
         }
     }
 }
@@ -253,6 +273,8 @@ impl Component for App {
                         Pattern::QuadraticGrowth => self.universe.set_rle(x, y, include_str!("patterns/life_without_death/quadratic_growth.rle")),
                         Pattern::P200Oscillator => self.universe.set_rle(x, y, include_str!("patterns/day_and_night/p200_oscillator.rle")),
                         Pattern::LFODMisc => self.universe.set_rle(x, y, include_str!("patterns/live_free_or_die/misc.rle")),
+                        Pattern::SeedsMisc => self.universe.set_rle(x, y, include_str!("patterns/seeds/misc.rle")),
+                        Pattern::SimpleReplicator => self.universe.set_rle(x, y, include_str!("patterns/highlife/simple_replicator.rle")),
                     } 
                 }
 
@@ -287,6 +309,15 @@ impl Component for App {
                     RuleSet::LifeWithoutDeath => self.universe.set_rules(vec!(3), vec!(0, 1, 2, 3, 4, 5, 6, 7, 8)),
                     RuleSet::DayAndNight => self.universe.set_rules(vec!(3,6,7,8), vec!(3,4,6,7,8)),
                     RuleSet::LiveFreeOrDie => self.universe.set_rules(vec!(2), vec!(0)),
+                    RuleSet::Replicator => self.universe.set_rules(vec!(1,3,5,7), vec!(1,3,5,7)),
+                    RuleSet::Replicator2 => self.universe.set_rules(vec!(1,3,5,7), vec!(0,2,4,6,8)),
+                    RuleSet::Seeds => self.universe.set_rules(vec!(2), vec!()),
+                    RuleSet::Maze => self.universe.set_rules(vec!(3), vec!(1,2,3,4,5)),
+                    RuleSet::EightLife => self.universe.set_rules(vec!(3), vec!(2,3,8)),
+                    RuleSet::LongLife => self.universe.set_rules(vec!(3,4,5), vec!(5)),
+                    RuleSet::HighLife => self.universe.set_rules(vec!(3, 6), vec!(2,3)),           
+                    RuleSet::DryLife => self.universe.set_rules(vec!(3,7), vec!(2,3))   
+
                 }
                 self.ruleset = rules;
                 true
@@ -398,6 +429,8 @@ impl Component for App {
                 Pattern::QuadraticGrowth,
                 Pattern::P200Oscillator,
                 Pattern::LFODMisc,
+                Pattern::SeedsMisc,
+                Pattern::SimpleReplicator,
             ];
 
         let rules = vec! [
@@ -405,6 +438,14 @@ impl Component for App {
             RuleSet::LifeWithoutDeath,
             RuleSet::DayAndNight,
             RuleSet::LiveFreeOrDie,
+            RuleSet::Replicator,
+            RuleSet::Replicator2,
+            RuleSet::Seeds,
+            RuleSet::Maze,
+            RuleSet::EightLife,
+            RuleSet::LongLife,
+            RuleSet::HighLife,
+            RuleSet::DryLife,
         ];
 
         html! {
