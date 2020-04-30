@@ -19,13 +19,7 @@ Click to add some default interesting patterns, or paste your own:
 Load or export a pattern:
 (gif here)
 
-You can also use other Life-like ruleset:
-(gif here)
-
-Or non-totalistic rules:
-(gif here)
-
-Or non-isotropic rules:
+You can also use some other interesting outer-totalistic rulesets:
 (gif here)
 
 ## Design
