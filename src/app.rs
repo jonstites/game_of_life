@@ -638,6 +638,7 @@ mod life {
         next_active: TSet,
         pub generation: u64,
         rule_table: RuleTable,
+        garbage_collector: Vec<TCoord>,
     }
 
     impl Add for TCoord {
@@ -727,14 +728,19 @@ mod life {
             let next_active = TSet::default();
             let generation = 0;
             let rule_table = RuleTable::new(b, s);
+            let garbage_collector = Vec::new();
 
             Universe {
-                p01, p10, active, next_active, generation, rule_table,
+                p01, p10, active, next_active, generation, rule_table, garbage_collector,
             }
         }
 
         pub fn set_rules(&mut self, b: Vec<u32>, s: Vec<u32>) {
             self.rule_table = RuleTable::new(b, s);
+
+            if self.generation % 64 == 0 {
+                self.gc();
+            }
 
             if self.generation % 2 == 0 {
                 for &coord in self.p01.keys() {
@@ -757,6 +763,30 @@ mod life {
             self.p01 = TMap::default();
             self.p10 = TMap::default();
             self.active = TSet::default();
+        }
+
+        pub fn gc(&mut self) {
+            for (&coord, &tile) in &self.p01 {
+                if tile == Tile(0) {
+                    self.garbage_collector.push(coord);
+                }
+            }
+
+            for tile in &self.garbage_collector {
+                self.p01.remove(tile);
+            }
+            self.garbage_collector.clear();
+
+            for (&coord, &tile) in &self.p10 {
+                if tile == Tile(0) {
+                    self.garbage_collector.push(coord);
+                }
+            }
+
+            for tile in &self.garbage_collector {
+                self.p10.remove(tile);
+            }
+            self.garbage_collector.clear();
         }
 
         pub fn step(&mut self) {
