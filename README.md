@@ -6,24 +6,24 @@ An implementation of [Conway's Game of Life](https://en.wikipedia.org/wiki/Conwa
 
 Move around and zoom in and out:
 
-![Move and zoom](https://raw.github.com/jonstites/game_of_life/docs/.docs/move_and_zoom.gif?sanitize=true)
+![Move and zoom](https://raw.github.com/jonstites/game_of_life/master/.docs/move_and_zoom.gif?sanitize=true)
 
 
 Randomize a region:
 
-![Randomize](https://raw.github.com/jonstites/game_of_life/docs/.docs/randomize.gif?sanitize=true)
+![Randomize](https://raw.github.com/jonstites/game_of_life/docs/.master/randomize.gif?sanitize=true)
 
 Slow or fast:
 
-![Control speed](https://raw.github.com/jonstites/game_of_life/docs/.docs/speed.gif?sanitize=true)
+![Control speed](https://raw.github.com/jonstites/game_of_life/master/.docs/speed.gif?sanitize=true)
 
 Choose among some hand-picked interesting patterns:
 
-![Choose patterns](https://raw.github.com/jonstites/game_of_life/docs/.docs/choose_patterns.gif?sanitize=true)
+![Choose patterns](https://raw.github.com/jonstites/game_of_life/master/.docs/choose_patterns.gif?sanitize=true)
 
 You can also use some other fun outer-totalistic rulesets:
 
-![Rulesets](https://raw.github.com/jonstites/game_of_life/docs/.docs/rulesets.gif?sanitize=true)
+![Rulesets](https://raw.github.com/jonstites/game_of_life/docs/.master/rulesets.gif?sanitize=true)
 
 ## Design
 
