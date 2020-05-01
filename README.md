@@ -13,7 +13,7 @@ Move around and zoom in and out:
 
 Randomize a region:
 
-![Randomize](https://raw.github.com/jonstites/game_of_life/docs/.master/randomize.gif?sanitize=true)
+![Randomize](https://raw.github.com/jonstites/game_of_life/master/.docs/randomize.gif?sanitize=true)
 
 Slow or fast:
 
@@ -25,7 +25,7 @@ Choose among some hand-picked interesting patterns:
 
 You can also use some other fun outer-totalistic rulesets:
 
-![Rulesets](https://raw.github.com/jonstites/game_of_life/docs/.master/rulesets.gif?sanitize=true)
+![Rulesets](https://raw.github.com/jonstites/game_of_life/master/.docs/rulesets.gif?sanitize=true)
 
 ## Tech Stack
 
