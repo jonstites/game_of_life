@@ -1,6 +1,8 @@
-# Conk - Conway's Game of Life
+# Conway's Game of Life
 
 An implementation of [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway's_Game_of_Life).
+
+[![Build Status](https://travis-ci.com/jonstites/game_of_life.svg?branch=master)](https://travis-ci.com/jonstites/fractious)
 
 ## Features
 
@@ -25,45 +27,61 @@ You can also use some other fun outer-totalistic rulesets:
 
 ![Rulesets](https://raw.github.com/jonstites/game_of_life/docs/.master/rulesets.gif?sanitize=true)
 
+## Tech Stack
+
+This implementation uses [Yew](https://github.com/yewstack/yew) framework.
+
+In other words - it is Rust code that is compiled to webassembly, HTML, CSS, and JavaScript.
+
+WebGL is used for rendering.
+
+## Motivation
+
+Because up until now, there isn't a good implementation of Conway's Game of Life.
+
+Kidding, obviously.
+
+I think Rust and webassembly are likely to become way more popular, and that exposure to them generalizes well towards other technologies, and just intrinsic motivation and fun.
+
 ## Design
 
-A naive implementation of Game of Life uses a fixed-size universe of two matrices or lists. At each generation, the matrix (or list) is traversed, the neighbor count is calculated, and the updated cell state is recorded in the second matrix or list.
+I set out with the following wishlist:
 
-This has the huge advantage of being very very simple.
+1. infinite or apparently-infinite universe
+2. reasonable performance on large, chaotic universes
+3. support for multiple rulesets
+4. interactivity
 
-The disadvantages:
+Off-the-bat, requirement 1 rules out the easiest and most-straightforward approach: a fixed-size universe of two matrices or lists.
 
-- it is slow
-- it does not support an infinite universe
+Requirements 2 and 4 rule out the well-known HashLife algorithm. HashLife is incredible, but not well-suited for somebody sitting and watching the results.
 
-There are optimizations that make it faster, such as only traversing cells whose neigbors have changed in the previous generation.
+I considered using either a tree or a hash table.
 
-A more sophisticated implementation is to use a HashMap of live cells. This supports an infinite universe. Hashing is slow.
+Specifically, I was interested in building a quad-tree and maybe even doing some caching of children for additional speedups.
 
-A totally different and very sophisticated algorithm is HashLife. This however is not great for "live viewing."
+Any tree also has the obvious advantage of avoiding hashing, and therefore performance advantages.
 
-### This design
+A hash table is dead simple.
 
-Tree structure - no hashing.
+After running tests that showed that FNV hash was reasonably fast and unlikely to be a bottleneck, I went with the hash table. 
 
-Very little memory for empty space.
+It has following optimizations:
 
-Calculates 32 (64) cells at a time. Uses tiles (4x8) and supertiles of either tiles or supertiles.
+1. FNV hashing of the integer coordinates
+2. cells are calculated in 2x2 blocks from a 4x4 block using bit operations and a lookup table
+3. static 4x8 blocks of cells whose 3 neighbors are also static are skipped
+4. stagger-step between generations to reduce overhead and number of neighbor blocks that can trigger a 4x8 block to be calculated
 
-Only updates when necessary.
+Inspiration comes from these sources and source code:
 
-WebGL?
+[Golly](https://sourceforge.net/p/golly/code/ci/master/tree/gollybase/qlifealgo.h)
 
-The smallest unit is a tile. A tile is an unsigned 32-bit integer that represents a region of horizontal width 4 and vertical height 8. The most-significant bit is in the upper left. The rows are filled first, followed by the columns.
+[Alan Hensel](http://www.ibiblio.org/lifepatterns/lifeapplet.html)
 
-A chunk can be either a tile or a supertile.
+[lifelib](https://gitlab.com/apgoucher/lifelib)
 
-A supertile is a region with 8 child chunks and some metadata about them. The 8 child chunks can either be tiles or supertiles themselves.
+[conwaylife](https://www.conwaylife.com/forums/viewtopic.php?f=7&t=3237)
 
-These 4 child chunks represent 4 units in a rectangle - upper left, upper right, lower left, lower right. The other 4 child chunks are for the previous generation.
+[Graphics Programmer's Black Book](http://www.jagregory.com/abrash-black-book/#chapter-18-its-a-plain-wonderful-life)
 
-A "stagger step" process is used to optmizes the number of neighbors that need to be updated.
-
-The next generation is computed using 4x4 blocks at a time to lookup the result for the inner 2x2 region.
-
-When a supertiles's 4 child chunks are all dead and the metadata says that they have not been updated, then the supertile is converted into None.

@@ -1,8 +1,13 @@
 [package]
 name = "conk"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Jonathan Stites <mail@jonstites.com>"]
 edition = "2018"
+readme = "README.md"
+documentation = "https://github.com/jonstites/game_of_life"
+homepage = "https://github.com/jonstites/game_of_life"
+repository = "https://github.com/jonstites/game_of_life"
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -38,13 +43,14 @@ console_error_panic_hook = { version = "0.1", optional = true }
 wasm-bindgen-test = "0.3.10"
 
 [profile.release]
-# Tell `rustc` to optimize for small code size.
+# Tell `rustc` to optimize for speed
 opt-level = 3
 
 [profile.bench]
 opt-level = 3
 
 [package.metadata.wasm-pack.profile.release]
+# odd failures with webpack
 wasm-opt = false
 
 [package.metadata.wasm-pack.profile.profiling]
