@@ -6,6 +6,8 @@ An implementation of [Conway's Game of Life](https://en.wikipedia.org/wiki/Conwa
 
 ## Features
 
+Try it out at [https://life.jonstites.com](https://life.jonstites.com)
+
 Move around and zoom in and out:
 
 ![Move and zoom](https://raw.github.com/jonstites/game_of_life/master/.docs/move_and_zoom.gif?sanitize=true)
